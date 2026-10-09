@@ -1,0 +1,10 @@
+{
+  "inStream": true,
+  "domClass": {
+    "tag": "div",
+    "cls": "paragraph",
+    "len": 12,
+    "head": "Kimi 探针测试成功。"
+  },
+  "respLen": 18686
+}

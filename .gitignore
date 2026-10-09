@@ -1,0 +1,18 @@
+# 依赖与构建产物
+node_modules/
+dist/
+release/
+
+# 工具自己的浏览器配置（含登录态，绝不可提交）
+.browser-profile/
+
+# 探针产物（含页面/接口原始数据，按批保留、不提交）
+probe/out/
+probe/out2/
+probe/out3/
+
+# 临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

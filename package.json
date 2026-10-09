@@ -1,0 +1,13 @@
+{
+  "name": "free-outsource",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "免费外包 —— 让主包AI调用网页版AI（DeepSeek 等）干活，并把结果与文件取回来",
+  "scripts": {
+    "probe:deepseek": "node probe/probe-deepseek.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.64.0"
+  }
+}

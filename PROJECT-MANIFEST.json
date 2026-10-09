@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "phase": "initial-dev",
+  "docRoot": {
+    "requirements": "docs/requirements",
+    "specs": "docs/requirements/specs",
+    "design": "docs/design",
+    "modules": "docs/design/modules",
+    "batches": "docs/batches"
+  },
+  "promptsLanding": "thincoder-core/prompts",
+  "checkConfig": {
+    "scanDirs": [
+      "docs"
+    ],
+    "lineWidth": 300,
+    "widthExemptZones": [],
+    "anchors": {
+      "domain": "docs",
+      "exclude": [
+        "_archive",
+        "batches"
+      ]
+    },
+    "exemptions": [],
+    "lineCounts": []
+  },
+  "codePaths": [
+    "src"
+  ],
+  "index": {
+    "codeExtensions": [],
+    "docExtensions": [],
+    "excludePaths": [],
+    "publicRepos": []
+  },
+  "advisor": {
+    "docMap": "",
+    "standardsDoc": ""
+  }
+}

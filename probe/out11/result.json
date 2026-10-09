@@ -1,0 +1,22 @@
+{
+  "sent": true,
+  "chatPosts": [
+    "https://www.kimi.com/apiv2/kimi.gateway.chat.v1.ChatService/Chat"
+  ],
+  "typed": "请只回复这一句话，不要有其他内容：Kimi 探针测试成功",
+  "answer": {
+    "tag": "div",
+    "cls": "toolcall-rollup__part toolcall-rollup__flat",
+    "text": "请只回复这一句话，不要有其他内容：Kimi 探针测试成功"
+  },
+  "candidateClasses": [
+    "chat-content-container",
+    "chat-content-list",
+    "chat-content-item chat-content-item-user",
+    "segment segment-user",
+    "segment-container",
+    "segment-content"
+  ],
+  "chatRespLen": null,
+  "chatRespHead": null
+}

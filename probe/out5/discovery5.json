@@ -1,0 +1,59 @@
+{
+  "startedAt": "2026-10-08T23:26:25.705Z",
+  "toggle": {
+    "initial": {
+      "thinking": {
+        "aria": "false",
+        "cls": "f79352dc ds-toggle-button ds-toggle-button--m"
+      },
+      "search": {
+        "aria": "true",
+        "cls": "f79352dc ds-toggle-button ds-toggle-button--m ds-toggle-button--selected"
+      }
+    },
+    "setting": {
+      "thinking": {
+        "ok": true,
+        "strategy": "locator",
+        "attempts": [
+          {
+            "strat": "locator",
+            "err": null,
+            "ariaAfter": true
+          }
+        ]
+      },
+      "search": {
+        "ok": true,
+        "strategy": "locator",
+        "attempts": [
+          {
+            "strat": "locator",
+            "err": null,
+            "ariaAfter": false
+          }
+        ]
+      }
+    }
+  },
+  "payloads": [
+    {
+      "thinking": true,
+      "search": false,
+      "model": "default"
+    }
+  ],
+  "sse": {
+    "events": 167,
+    "textLen": 300,
+    "thinkingLen": 0,
+    "thinkingHead": ""
+  },
+  "download": {
+    "name": "deepseek_python_20261008_4571b4.py",
+    "dest": "D:\\免费外包\\free-outsource\\probe\\out5\\downloads\\deepseek_python_20261008_4571b4.py",
+    "ok": false,
+    "err": "download.saveAs: Target page, context or browser has been closed"
+  },
+  "error": "page.evaluate: Target page, context or browser has been closed\n    at readToggle (D:\\免费外包\\free-outsource\\probe\\probe5-deepseek-toggle-click.mjs:41:21)\n    at stateOf (D:\\免费外包\\free-outsource\\probe\\probe5-deepseek-toggle-click.mjs:52:38)\n    at setToggle (D:\\免费外包\\free-outsource\\probe\\probe5-deepseek-toggle-click.mjs:54:16)\n    at D:\\免费外包\\free-outsource\\probe\\probe5-deepseek-toggle-click.mjs:219:20"
+}

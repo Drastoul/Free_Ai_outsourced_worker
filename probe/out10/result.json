@@ -1,0 +1,16 @@
+{
+  "sent": true,
+  "chatPosts": [
+    "https://www.kimi.com/apiv2/kimi.gateway.chat.v1.KimiPlusService/ListKimiPlus",
+    "https://www.kimi.com/apiv2/kimi.gateway.chat.v1.KimiPlusService/ListKimiPlus",
+    "https://www.kimi.com/apiv2/kimi.gateway.message.v1.MessageCenterService/GetReadStates",
+    "https://www.kimi.com/apiv2/kimi.gateway.chat.v1.ChatService/Chat",
+    "https://www.kimi.com/apiv2/kimi.outbox.v1.OutboxService/ListOutboxMessages"
+  ],
+  "answer": {
+    "tag": "span",
+    "cls": "user-content__text",
+    "text": "请只回复这一句话，不要有其他内容：Kimi 探针测试请只回复这一句话，不要有其他内容：Kimi 探针测试成功成功"
+  },
+  "typed": "请只回复这一句话，不要有其他内容：Kimi 探针测试请只回复这一句话，不要有其他"
+}
