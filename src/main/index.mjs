@@ -1,5 +1,5 @@
-// 应用入口（主进程）：单实例 / 托盘 / 生命周期 / 配置 / 引擎接线 / MCP 服务 / runtime.json。
-// 设计权威：docs/design/overview.md §2（进程与 MCP 接入）、§2.3（端口策略与 runtime.json）、§4（配置存储）。
+// 应用入口（主进程）：单实例 / 托盘 / 生命周期 / 配置 / 引擎接线 / MCP 服务 / runtime.json / 设置窗口接线（b2，见 src/settings/wiring.mjs）。
+// 设计权威：docs/design/overview.md §2（进程与 MCP 接入）、§2.1（二实例唤起）、§2.3（端口策略与 runtime.json）、§4（配置存储）。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import { createTray } from './tray.mjs';
 import { EngineClient } from './engine-client.mjs';
 import { Scheduler } from './scheduler/scheduler.mjs';
 import { startMcpServer } from './mcp/server.mjs';
+import { createSettingsWiring } from '../settings/wiring.mjs';
 import { resolveOutboxDir, writeJsonAtomic } from '../shared/outbox.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,9 +32,11 @@ let scheduler = null;
 let mcp = null;
 let runtimeFile = null;
 let quitting = false;
+let settings = null;
 
 // ---------------------------------------------------------------------------
-// 单实例：二实例启动时唤起已运行实例（b1 无设置窗口，以托盘通知与日志告知）
+// 单实例：二实例启动时唤起已运行实例——打开并聚焦设置窗口（b2；docs/design/overview.md §2.1）；
+// 首实例尚未就绪（设置未接线）⇒ 退回托盘通知告知已在运行（不静默）
 // ---------------------------------------------------------------------------
 
 const gotLock = app.requestSingleInstanceLock();
@@ -47,8 +50,13 @@ if (!gotLock) {
       app.quit();
       return;
     }
-    log.info('检测到第二实例启动：本应用已在运行（单实例）');
-    tray?.notify({ title: '免费外包已在运行', body: trayInfo() });
+    log.info('检测到第二实例启动：打开并聚焦设置窗口（单实例）');
+    const opened = withSettings((s) => s.openSettings(), { notReadyMessage: null });
+    // 首实例仍处启动早期（设置与托盘都未就绪）⇒ 至少留一行日志，不让诉求静默丢失
+    if (!opened) {
+      log.warn('二实例唤起：设置界面尚未就绪，暂无法打开（已在运行的实例继续运行）');
+      tray?.notify({ title: '免费外包已在运行', body: trayInfo() });
+    }
   });
 
   if (wantsQuit) {
@@ -74,6 +82,15 @@ function trayInfo() {
   return mcp?.ok ? `MCP 地址：${mcp.url}` : 'MCP 服务未启动（详见日志）';
 }
 
+/** 设置入口守卫：尚未接线（启动早期）⇒ 明示，不静默；notReadyMessage=null 时不发通知（调用方自行告知） */
+function withSettings(fn, { notReadyMessage = '设置界面尚未就绪，请稍后再试' } = {}) {
+  if (!settings) {
+    if (notReadyMessage) tray?.notify({ title: '免费外包', body: notReadyMessage });
+    return null;
+  }
+  return fn(settings);
+}
+
 // ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
@@ -96,6 +113,10 @@ async function main() {
     onQuit: () => app.quit(),
     // 人工处理后的恢复路径（scheduler.md §6）：清全部外包工冷却；服务尚未起来 ⇒ null（菜单给中性提示）
     onClearCooldown: () => (scheduler ? scheduler.workforce.clearAllHealth() : null),
+    // 托盘三入口（b2；设计 §1）：打开设置 / 打开交付目录 / 打开日志目录
+    onOpenSettings: () => withSettings((s) => s.openSettings()),
+    onOpenOutbox: () => void withSettings((s) => s.openOutbox()),
+    onOpenLogs: () => void withSettings((s) => s.openLogs()),
   });
   tray.update({ service: '启动中' });
 
@@ -122,6 +143,24 @@ async function main() {
     log,
     notify: (n) => tray?.notify(n),
   });
+
+  // 设置接线（b2）：服务 + 窗口控制器 + 托盘三入口 / 二实例 / 回落事件（细节见 src/settings/wiring.mjs）
+  settings = createSettingsWiring({
+    config,
+    scheduler,
+    engine,
+    log,
+    userDataDir: userData,
+    version,
+    notify: (n) => tray?.notify(n),
+    getServiceInfo: () => ({
+      ok: mcp?.ok === true,
+      url: mcp?.url ?? null,
+      port: mcp?.port ?? null,
+      reason: mcp?.reason ?? null,
+    }),
+  });
+  settings.openIfRequested();
 
   // 交付目录实际路径解析（启动时点；回落 ⇒ 明示）
   const outbox = await resolveOutboxDir(config.current.outboxDir, { log });
@@ -164,6 +203,9 @@ async function main() {
       body: `${mcp.reason}；请释放占用端口的程序，或改写配置 mcp.port 后重启`,
     });
   }
+
+  // 服务状态就绪 ⇒ 推一次快照（接入指引页据实况显示「运行中 / 未启动 + 原因 / 建议」）
+  void settings?.emitChanged('服务状态');
 
   app.on('window-all-closed', () => {
     /* 托盘常驻：不随窗口关闭退出 */

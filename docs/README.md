@@ -15,10 +15,11 @@
 | 模块 · 适配器 | `docs/design/modules/adapters.md` | 适配器接口 + DeepSeek 首实现（流协议权威） | 已批准（b1 已实施） |
 | 模块 · 浏览器引擎 | `docs/design/modules/browser-engine.md` | 配置目录、启动参数、下载捕获、崩溃重启 | 已批准（b1 已实施） |
 | 模块 · 交付 | `docs/design/modules/outbox.md` | 目录结构、manifest、命名净化、上限 | 已批准（b1 已实施） |
-| 模块 · 设置界面 | `docs/design/modules/settings-app.md` | b2 设置窗口页面与交互 | 初稿（b2 实施） |
+| 模块 · 设置界面 | `docs/design/modules/settings-app.md` | b2 设置窗口页面与交互 | 已批准（b2 已实施） |
 | 接入说明（随包） | `docs/guide/agent-onboarding.md` | R7① 面向操作者的接入长文 | 已交付（b1） |
 | AI 说明（随包） | `docs/guide/agent-brief.md` | R7④ 给 AI-Agent 的服务自述 | 已交付（b1） |
 | 批次档 b1 | `docs/batches/b1-core-loop.md` | 本批讨论 / 任务与设计 / 评审 / 批准 / 实施 / 收口记录（六段一作者） | 已收口 2026-10-09 |
+| 批次档 b2 | `docs/batches/b2-settings-ui.md` | 同上（b2 设置界面） | 已收口 2026-10-10 |
 
 - `docs/requirements/specs/`：功能规格层（暂空，后续批按需建立）。
 - `docs/batches/` 下另有随批归档的单元测试文件（开发期工具，不进 `test/` 树）与 fixtures（`b1-core-loop.fixtures/`：SSE fixture 与期望基线）。

@@ -52,7 +52,7 @@
 
 ## 7. 配置同步
 
-- 渲染进程只经 IPC：`config:get` / `config:patch`；主进程负责校验、原子写、广播变更（单一写者）。
+- 渲染进程只经 IPC：`fo:snapshot` / `fo:patch`（**通道名以此为准**——八方法各自的通道常量与 `window.fo` 暴露面同处 `src/settings/preload.cjs`，跨面改动须两处同步）；主进程负责校验、原子写、广播变更（单一写者）。
 - 手改 config.json：下次启动生效；不做文件监听（避免读入半写状态）。
 
 ## 8. 验收判据（b2）

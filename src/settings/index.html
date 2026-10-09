@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none';" />
+  <title>免费外包 · 设置</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <h1 class="app-title">免费外包 · 设置</h1>
+    <nav class="tabs">
+      <button type="button" class="tab" data-page="workers">外包工</button>
+      <button type="button" class="tab" data-page="guide">接入指引</button>
+      <button type="button" class="tab" data-page="outbox">交付目录</button>
+      <button type="button" class="tab" data-page="about">关于</button>
+    </nav>
+  </header>
+
+  <main class="panels">
+    <!-- 外包工（T2–T8）：行结构在 renderer-workers.js 构建
+         —— [data-worker-id] 行内 data-field=name|enabled|status|checked · data-toggle=thinking|search · data-action=up|down|delete|check -->
+    <section class="panel" data-page-panel="workers" hidden>
+      <div class="panel-head">
+        <h2>外包工</h2>
+        <button type="button" data-action="add-worker">新增外包工</button>
+      </div>
+      <p class="hint">主包AI 派单可指定外包工名；仅列表内已启用的外包工可被指定。</p>
+      <p class="hint">每行的「深度思考 / 联网搜索」开关随外包工登记（改动即时落盘），派单时自动应用。</p>
+      <p class="hint login-guide" data-field="login-guide" hidden></p>
+      <ul class="worker-list" data-worker-list></ul>
+      <p class="empty" data-field="workers-empty" hidden>暂无外包工，点击「新增外包工」开始。</p>
+    </section>
+
+    <!-- 接入指引（T9 / T10） -->
+    <section class="panel" data-page-panel="guide" hidden>
+      <div class="panel-head"><h2>接入指引</h2></div>
+      <dl class="kv">
+        <dt>服务状态</dt><dd data-field="service-status">—</dd>
+        <dt>实际 MCP 地址</dt><dd><code data-field="mcp-url">—</code></dd>
+        <dt>备选 SSE 地址</dt><dd><code data-field="sse-url">—</code></dd>
+        <dt>版本号</dt><dd data-field="version">—</dd>
+        <dt>导出目录</dt><dd><code data-field="export-dir">—</code></dd>
+      </dl>
+      <p class="hint" data-field="service-note" hidden></p>
+      <p class="hint">接入顺序：先启动本工具 → 再在宿主里新增 MCP 服务器（宿主探活通过才会保存）。</p>
+      <div class="actions">
+        <button type="button" data-action="copy-mcp-json">复制 .mcp.json 片段</button>
+        <button type="button" data-action="copy-mcp-servers">复制 mcp.servers 片段</button>
+        <button type="button" data-action="export">一键导出为文件</button>
+        <button type="button" data-action="open-export">打开导出目录</button>
+        <button type="button" data-action="open-guide">打开随包文档</button>
+      </div>
+      <p class="hint">两形态片段按实际端口生成：<code>.mcp.json</code>（项目根形态全文）与
+        <code>mcp-servers.json</code>（宿主 <code>config.json</code> 的 <code>mcp.servers</code> 数组形片段）。
+        请读取后并入宿主配置，<strong>不要整文件覆盖宿主 config.json</strong>；每次导出按实际端口重新生成、覆盖刷新同一文件。</p>
+    </section>
+
+    <!-- 交付目录（T11） -->
+    <section class="panel" data-page-panel="outbox" hidden>
+      <div class="panel-head"><h2>交付目录</h2></div>
+      <dl class="kv">
+        <dt>当前实际交付目录</dt><dd><code data-field="outbox-actual">—</code></dd>
+      </dl>
+      <p class="hint" data-field="outbox-note" hidden></p>
+      <div class="actions">
+        <button type="button" data-action="pick-outbox-dir">选择目录…</button>
+        <button type="button" data-action="open-outbox">打开目录</button>
+      </div>
+      <p class="hint">修改即时落盘、即时生效（选定即校验：目录需存在或可创建且可写）。
+        产物为交付物，工具不主动删除、不自动清理。</p>
+    </section>
+
+    <!-- 关于（T12） -->
+    <section class="panel" data-page-panel="about" hidden>
+      <div class="panel-head"><h2>关于</h2></div>
+      <dl class="kv">
+        <dt>版本号</dt><dd data-field="about-version">—</dd>
+        <dt>日志目录</dt><dd><code data-field="logs-dir">—</code></dd>
+      </dl>
+      <div class="actions">
+        <button type="button" data-action="copy-logs-path">复制日志路径</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- 提示条：成功 / 失败都明示（不静默） -->
+  <div class="toast" data-field="notice" role="status" hidden></div>
+
+  <!-- 删除二次确认（T3；文案含「浏览器配置目录保留」「已排队任务改派或转人工」） -->
+  <div class="modal" data-confirm hidden>
+    <div class="modal-body">
+      <p class="modal-text" data-field="confirm-text"></p>
+      <div class="modal-actions">
+        <button type="button" data-action="confirm-no">取消</button>
+        <button type="button" class="danger" data-action="confirm-yes">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增外包工：选平台（T2；DeepSeek 可选 / Kimi 灰显「待支持」——平台清单来自快照，不写死） -->
+  <div class="modal" data-add-dialog hidden>
+    <div class="modal-body">
+      <p class="modal-text">新增外包工：选择平台（默认名 = 平台名，添加后可在列表内改名）</p>
+      <div class="platform-list" data-platform-list></div>
+      <div class="modal-actions">
+        <button type="button" data-action="add-worker-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+  <script src="renderer-workers.js"></script>
+</body>
+</html>

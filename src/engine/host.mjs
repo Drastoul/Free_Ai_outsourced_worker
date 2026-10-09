@@ -2,7 +2,8 @@
 /**
  * 引擎子进程入口（`docs/design/modules/browser-engine.md`、`docs/design/modules/scheduler.md` §10）：
  *   · 协议 = **行分隔 JSON-RPC 2.0 over stdio**；stdout **只出 JSON-RPC 行**，日志一律走 stderr；
- *   · 方法 = `engine.health` / `task.run` / `task.cancel` / `engine.shutdown`；
+ *   · 方法 = `engine.health` / `task.run` / `task.cancel` / `engine.shutdown`；b2 增量 = `worker.check`
+ *     （「打开并检查」，语义见 `src/engine/worker-check.mjs`；既有四方法契约不变）；
  *   · 失败口径（主包AI 裁定 2026-10-09）= 业务 / 任务失败走 **`result.error: {code,message,hint?}`**；
  *     JSON-RPC `error` 只承载协议级 / 内部异常（报文不可解析、未知 method 等）；
  *   · 进度事件 = `{event:"task-progress", taskId, phase}`（逐行发出，phase 链见 `scheduler.md` §2）。
@@ -20,6 +21,7 @@ import { defaultUserDataDir, readConfigBrowser, resolveBrowserOptions } from './
 import { listAdapters } from './adapters/registry.mjs';
 import { EngineError } from './adapters/base.mjs';
 import { TaskRunner } from './task-runner.mjs';
+import { checkWorker } from './worker-check.mjs';
 import { makeLogger, sleep } from './util.mjs';
 
 export { DEFAULT_TIMEOUTS } from './task-runner.mjs';
@@ -78,6 +80,9 @@ export function createEngine({ env = process.env, log = makeLogger(), emit = () 
     shutdown,
     runTask: (params) => runner.run(params),
     cancelTask: (params) => runner.cancel(params),
+    // worker.check 仅透传 worker；预算不入协议（协议无预算参数，deadline 权威 = 主进程——scheduler.md §10）
+    checkWorker: (params) =>
+      checkWorker({ browser, runner, worker: params?.worker, log: (m) => log('check', m) }),
   };
 }
 
@@ -119,6 +124,8 @@ export function startServer({ env = process.env } = {}) {
         result = await engine.runTask(params);
       } else if (method === 'task.cancel') {
         result = engine.cancelTask(params);
+      } else if (method === 'worker.check') {
+        result = await engine.checkWorker(params);
       } else if (method === 'engine.shutdown') {
         writeLine({ jsonrpc: '2.0', id, result: { ok: true } });
         await engine.shutdown();

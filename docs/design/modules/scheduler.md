@@ -112,6 +112,9 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 - 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok}`（形状见 `docs/design/overview.md` §3.2 第 7 步）；**失败 = result 内 `error: {code, message, hint?} | null`**（与 manifest 的 `error` 同形；**JSON-RPC error 仅用于协议级 / 内部异常**，不承载业务失败）；失败时 `delivery` / `toggles` 可缺席（缺席 ⇒ 视为未产出，不得为凑字段造值）。
 - 进度事件：`{event: "task-progress", taskId, phase}`（供 `get_task` 展示）。
 - 引擎崩溃：主进程重启引擎并置进行中任务 `E_ENGINE_DOWN`（可重派）。
+- **设置界面「打开并检查」的增量方法**（b2；2026-10-09 主包AI 裁定）：`worker.check({worker: {id, name, platform}})` ⇒ `result = {status, detail?}`（`status ∈ ready | login_required | captcha | unavailable`，与引擎 `opening` 词表同源；失败走既有 `result.error` 口径）。语义 = 打开 / 复用该外包工浏览器会话并刷新登录态（**不发送消息、不关窗口**）；该外包工有在途任务时直接拒绝。既有四方法（`engine.health` / `task.run` / `task.cancel` / `engine.shutdown`）契约不变。
+- **残余风险（b2 已知并接受，2026-10-09 主包AI 裁定）**：上条是「**检查发起时**」的时点判定——检查在途期间新到达的派单会与该次检查**复用同一会话页**（页面复用见 `src/engine/browser.mjs` 的 `sessionPage`）。冻接口「有在途任务 ⇒ 拒绝」已满足，反方向未拦。影响 = 该任务可能落到 `E_LOGIN_REQUIRED` / 选择器类错误（**可重派**）；窗口 = 单次检查时长（≤ `openingMs`）。**消除它需把检查纳入每外包工串行（属新机制，须另立设计）**——已记技术待办，收口时裁定是否补。
+- **调用预算（deadline）来源 = 主进程**（不给引擎加预算入参）：设置服务按 `limits.timeouts.openingMs` 设本次调用**显式超时**（`EngineClient.call` 的 `timeoutMs` 选项——引擎不读配置，单一事实源口径同本节首条 `toggles`）；超时 ⇒ 该次检查结果丢弃（晚到响应按既有「无对应在途请求」语义忽略）、界面按超时示错，下一次检查可重取。
 
 ## 11. 验收判据
 

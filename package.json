@@ -11,7 +11,8 @@
     "verify:mcp": "node --test test/integration/mcp-face.test.mjs",
     "verify:engine": "node --test test/integration/engine.test.mjs",
     "verify:loop": "node --test test/integration/loop.test.mjs",
-    "verify:runtime": "node --test test/integration/runtime.test.mjs"
+    "verify:runtime": "node --test test/integration/runtime.test.mjs",
+    "verify:settings": "node --test test/integration/settings.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

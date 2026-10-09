@@ -60,6 +60,50 @@ export class Workforce {
     this.log?.warn(`外包工 ${workerId} 置冷却（${code}；${Math.round(COOLDOWN_MS / 60000)} 分钟）`);
   }
 
+  /**
+   * 检查结果写回（b2 设置界面「打开并检查」；口径 = 批次档 b2 §2 评审修复 ⑧）：
+   * 成功检查**整体替换**既有健康记录（不叠加）；记录形状 = 既有 `{status, detail, at, until}`（:16）。
+   * 词表映射（与引擎 opening 同源）：ready / login_required 同名直映（ready 也记检查时间）；
+   * `captcha` ⇒ 内部 `captcha_cooling`（对外词表 `unavailable` + detail「冷却中：验证码 / 风控」）。
+   * 冷却语义：ready / login_required ⇒ `until = null`（不置冷却——冷却到期假性回 ready 不适用于登录态）；
+   * captcha / unavailable ⇒ 沿用既有冷却（`until = now + COOLDOWN_MS`）。
+   * @param {string} workerId
+   * @param {{status: 'ready'|'login_required'|'captcha'|'unavailable', detail?: string|null}} result
+   * @returns {{status: string, detail: string|null, at: string|null}|null} 写回后的健康视图（statusOf 同形）；
+   *          外包工不在名册（如检查期间被删除）⇒ 不写回（else 托盘「我已处理」会以裸 id 报出孤儿记录）
+   */
+  markChecked(workerId, { status, detail } = {}) {
+    if (!this.byId(workerId)) {
+      this.log?.warn(`外包工 ${workerId} 已不在名册（可能已被删除），检查结果丢弃不写回`);
+      return null;
+    }
+    const known = ['ready', 'login_required', 'captcha', 'unavailable'];
+    let s = status;
+    if (!known.includes(s)) {
+      this.log?.warn(`外包工 ${workerId} 检查返回未知状态（${JSON.stringify(status)}），按 unavailable 处理`);
+      s = 'unavailable';
+    }
+    const at = new Date().toISOString();
+    const text = typeof detail === 'string' && detail ? detail : null;
+    if (s === 'ready' || s === 'login_required') {
+      // 缓存态：保留至下一次检查 / 任务结果 / 托盘「我已处理」覆盖
+      this.health.set(workerId, { status: s, detail: text, at, until: null });
+      this.log?.info(`外包工 ${workerId} 检查结果写回：${s}（不置冷却）`);
+    } else if (s === 'captcha') {
+      this.health.set(workerId, {
+        status: 'captcha_cooling',
+        detail: text || '冷却中：验证码 / 风控',
+        at,
+        until: Date.now() + COOLDOWN_MS,
+      });
+      this.log?.warn(`外包工 ${workerId} 检查结果写回：captcha ⇒ unavailable（冷却 ${Math.round(COOLDOWN_MS / 60000)} 分钟）`);
+    } else {
+      this.health.set(workerId, { status: 'unavailable', detail: text, at, until: Date.now() + COOLDOWN_MS });
+      this.log?.warn(`外包工 ${workerId} 检查结果写回：unavailable（冷却 ${Math.round(COOLDOWN_MS / 60000)} 分钟）`);
+    }
+    return this.statusOf(workerId);
+  }
+
   clearHealth(workerId) {
     if (this.health.delete(workerId)) {
       this.log?.info(`外包工 ${workerId} 健康状态恢复为 ready`);

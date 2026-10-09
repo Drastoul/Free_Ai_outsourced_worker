@@ -85,13 +85,15 @@ export class Scheduler extends EventEmitter {
     return t;
   }
 
-  /** 交付目录回落：明示实际路径与回落原因（不静默；同一实际值只通知一次） */
+  /** 交付目录回落：明示实际路径与回落原因（不静默；同一实际值只通知一次）；
+   *  同一时点发 `outbox-fallback` 事件（b2：设置界面据此同步显示实际落点与原因——订阅转发在 src/settings/wiring.mjs） */
   reportOutboxFallback(outbox) {
     const key = `${outbox.dir}|${outbox.reason}`;
     this.log.warn(`交付目录回落：实际路径=${outbox.dir}；原因=${outbox.reason}（配置值=${outbox.configured}）`);
     if (this._lastFallbackKey !== key) {
       this._lastFallbackKey = key;
       this.notify({ title: '免费外包：交付目录已回落', body: `配置目录不可用，产物将落在：${outbox.dir}` });
+      this.emit('outbox-fallback', outbox);
     }
   }
 

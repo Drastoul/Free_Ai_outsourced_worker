@@ -9,6 +9,7 @@
 > - 2026-10-09 R8 追加落位：外包工开关（配置 schema / 应用与核对 / 错误归口 / 验收落点）；下载落盘改 CDP 自动落盘（探针 4–6 实测）；新增 K13。
 > - 2026-10-09 R9 与 R5·F5.7 追加落位：端点与发布面（期望 / 实际端口、`runtime.json` 字段清单、两形态接入片段与一键导出、说明文档 R9 两节、`verify:runtime`）与交付目录设置（实际路径解析 / 落点唯一性 / 不可用回落）。
 > - 2026-10-09 轮次 3 评审修复（P1–P10）：F9.6 / ③ 批次口径同源（生成 / 一键复制 / 一键导出随 b2）；期望端口写入通道（文件手改）与 ①「本工具端点配置」节；R8 引擎侧数据面（`task.run` 入参 `toggles` / 请求载荷捕获 / 回报形状）；端口顺延耗尽终局（MCP 服务不启动，不引入错误码）；`runtime.json` 生命周期（写 / 覆写 / 退出尽力删除）与 `pid` 判活；`verify:mcp` 文档断言对象写实 + 字段形状；AC-R8-2 日志落点；AC-R5-6 两段复现步骤。
+> - 2026-10-09 b2 落位：§2.1 二实例启动 ⇒ 唤起已运行实例（打开并聚焦设置窗口；2026-10-09 主包AI 裁定）。
 
 ## 1. 目标与范围
 
@@ -25,7 +26,7 @@
 
 ### 2.1 进程模型
 
-应用为**单实例 Electron 应用**：托盘常驻；设置窗口按需打开（b2）。二实例启动时唤起已运行实例。
+应用为**单实例 Electron 应用**：托盘常驻；设置窗口按需打开（b2）。**二实例启动 ⇒ 唤起已运行实例：打开并聚焦设置窗口**（b2；2026-10-09 主包AI 裁定）。
 
 | 进程角色 | 承载内容 | 生命周期 |
 |---|---|---|
@@ -295,11 +296,12 @@
 | 集成 | `npm run verify:engine` | 浏览器引擎 + 下载捕获（CDP 自动落盘，本地 blob 页）+ 开关应用失败场景（本地 fixture 页；AC-R8-3）——不依赖平台登录 |
 | 集成 | `npm run verify:loop` | 真机端到端：派单 → 取答复 → 取件 → outbox 判据（含开关载荷核对 `manifest.toggles`；AC-R8-1；需登录态） |
 | 集成 | `npm run verify:runtime` | 端点与端口：占用顺延 / 期望端口固定 / `runtime.json` 与探活（AC-R9-1；AC-R9-2 b1 侧；自控应用启停） |
+| 集成 | `npm run verify:settings` | b2 设置界面：窗口与四页签 / 外包工增删调序改名与启用 / **开关双读（config + 快照回显）** / 交付目录两段 / 实际地址与两形态复制（含未启动态） / 一键导出 / 关于页 / 检查动作预算 / 退出重启保留（AC-R5-1..6 · AC-R8-2 界面侧 · AC-R7-2 · AC-R9-1·2·4 界面侧；自控应用启停） |
 
 - **自举验收（b1 收口，操作）**：写 `.mcp.json` → 宿主「设置 → MCP」探活 → 主包AI 真实派单 → outbox 出现任务目录且 manifest.state = done。若宿主 URL 型接不通 ⇒ 触发 K9（补 stdio shim）。
 - **R7 验收**：AC-R7-1 / R7-3 落于 `npm run verify:mcp` 的文档断言（① `docs/guide/agent-onboarding.md` 四节结构 + R9 两节「换机后首次接入」「端点 / 端口变化后如何更新宿主配置」+「本工具端点配置」节；④ `docs/guide/agent-brief.md` 五要素自述；内嵌 JSON 片段可解析 + 字段形状断言（`mcpServers` 对象形 + `url` 字段；`config.json` 的 `mcp.servers` 数组形样例）；工具清单与 `tools/list` 对照）；AC-R7-2 在 b1 收口时执行一次（陌生 AI 只读 ① 完成接入并派单成功）。
 - **称谓验收（AC-R2-1）**：检索面 = `docs/**`、`src/**` 与界面词表（UI 文案常量）；判据 = 凡指代调用方一律为「主包AI」，唯一例外 = 术语表已定义的「宿主」（MCP 客户端容器，仅传输 / 进程语境）；执行 = UTF-8 感知检索 + 命中项按术语表复核。
 - **开关验收（AC-R8-1..3）**：AC-R8-1 = `npm run verify:loop` 断言 `manifest.toggles`（`payload` 与 `configured` 一致）；AC-R8-2 = 操作（改配置重派复测载荷随动；引擎开关应用日志一行——目标值 / 实际值 / 复核结果，不含敏感值；界面侧随 b2）；AC-R8-3 = 选择器失效复现（`npm run verify:engine` 本地 fixture 页无开关元素 ⇒ 判 `E_SELECTOR_MISSING` 且不发送；b1 单外包工配置下任务落 needs_human）。
 - **R9 验收**：AC-R9-1 = `npm run verify:runtime` 场景 1（占住 17873 ⇒ `runtime.json.port ≠ 17873`、日志含同一实际端口、按该端口探活成功；界面显示一致随 b2）；AC-R9-2 = 场景 2（改配置期望端口 + 重启 ⇒ 以新端口服务、`runtime.json` 随动）+ b1 收口操作（按实际端口更新宿主配置 → 探活 + 派单成功）；AC-R9-4 = `verify:mcp` 文档断言（R9 两节存在）+ 人工核对（字段与界面实际显示一致；界面侧随 b2）；AC-R9-3 归 b4（与 AC-R6-2 同批）。
-- 命令与需求验收条目的对应：AC-R1-2 / R2-2 / R3-1..4 / R7-1 / R7-3 → `npm run verify:*`；AC-R8-1 → `npm run verify:loop`；AC-R8-3 → `npm run verify:engine`；AC-R9-1 / R9-2 → `npm run verify:runtime`；AC-R1-1 / R1-3 / R4a-* / R4b-* / R7-2 → 操作按判据核验；AC-R2-1 → 称谓检索（上述口径）；AC-R8-2 → 操作 + b2 界面；AC-R9-4 → 文档断言 + 人工可检（上述口径）。
+- 命令与需求验收条目的对应：AC-R1-2 / R2-2 / R3-1..4 / R7-1 / R7-3 → `npm run verify:*`；AC-R8-1 → `npm run verify:loop`；AC-R8-3 → `npm run verify:engine`；AC-R9-1 / R9-2 → `npm run verify:runtime`；AC-R1-1 / R1-3 / R4a-* / R4b-* / R7-2 → 操作按判据核验；AC-R2-1 → 称谓检索（上述口径）；AC-R8-2 → 操作 + b2 界面（`npm run verify:settings` 的开关双读断言）；AC-R5-1..6 / AC-R7-2 / AC-R9-4 界面侧 → `npm run verify:settings`；AC-R9-4 → 文档断言 + 人工可检（上述口径）。
 - 中文断言一律用 UTF-8 感知方式（node 扫描 / grep 工具），不用 `findstr` 匹配中文。

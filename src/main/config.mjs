@@ -29,11 +29,18 @@ export class ConfigStore {
     await writeJsonAtomic(this.file, this._config);
   }
 
-  /** 用新的整份配置替换（先校验归一化；非法项回退默认并返回 issues 供调用方记日志） */
+  /** 用新的整份配置替换（先校验归一化；非法项回退默认并返回 issues 供调用方记日志）。
+   *  写盘失败 ⇒ 回滚内存配置（b2·T8：内存与磁盘不漂移，界面据错误回滚显示；异常照旧抛给调用方） */
   async save(next) {
     const { config, issues } = normalizeConfig(next);
+    const previous = this._config;
     this._config = config;
-    await this.writeFile();
+    try {
+      await this.writeFile();
+    } catch (e) {
+      this._config = previous;
+      throw e;
+    }
     return issues;
   }
 

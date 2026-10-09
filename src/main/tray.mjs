@@ -1,5 +1,6 @@
-// 托盘：常驻入口、状态与通知（设计权威：docs/design/overview.md §2.1 / §2.3 / §5）
-// b1 无设置窗口（b2）；托盘菜单做状态明示、人工处理后的冷却恢复与退出——端口顺延 / 端口不可用 / 人工接管都以托盘通知告知。
+// 托盘：常驻入口、状态与通知（设计权威：docs/design/overview.md §2.1 / §2.3 / §5；设置界面 §1）
+// b2 三入口：「打开设置 / 打开交付目录 / 打开日志目录」（回调经 src/main/index.mjs 接线注入；未接线不显示死菜单项）；
+// 端口顺延 / 端口不可用 / 人工接管均以托盘通知告知（b1 语义不变）。
 
 import { Menu, Notification, Tray, nativeImage } from 'electron';
 import { truncate } from './log.mjs';
@@ -27,11 +28,13 @@ function makeIcon() {
 
 /**
  * 创建托盘。
- * @param {{version: string, log: object, onQuit: Function, onClearCooldown?: () => (string[]|null)}} deps
+ * @param {{version: string, log: object, onQuit: Function, onClearCooldown?: () => (string[]|null),
+ *          onOpenSettings?: Function, onOpenOutbox?: Function, onOpenLogs?: Function}} deps
  *        onClearCooldown = 清除全部外包工冷却（人工处理后的恢复路径），返回被恢复的外包工名；
  *        返回 null / undefined 表示服务尚未就绪；未接线（非函数）时菜单不显示该动作
+ *        onOpenSettings / onOpenOutbox / onOpenLogs = 托盘三入口（b2；设计 §1）；未接线不显示死菜单项
  */
-export function createTray({ version, log, onQuit, onClearCooldown }) {
+export function createTray({ version, log, onQuit, onClearCooldown, onOpenSettings, onOpenOutbox, onOpenLogs }) {
   const tray = new Tray(makeIcon());
   const state = { url: null, service: '启动中', port: null, expectedPort: null };
 
@@ -70,6 +73,18 @@ export function createTray({ version, log, onQuit, onClearCooldown }) {
     );
   };
 
+  /** 托盘动作的守卫包装：同步 / 异步异常都归为通知（不让托盘菜单静默失败） */
+  const guard = (label, fn) => () => {
+    try {
+      const r = fn();
+      if (r && typeof r.then === 'function') {
+        r.catch((e) => notify({ title: '免费外包', body: `${label}失败：${e?.message || e}` }));
+      }
+    } catch (e) {
+      notify({ title: '免费外包', body: `${label}失败：${e?.message || e}` });
+    }
+  };
+
   const rebuild = () => {
     const items = [
       { label: '免费外包', enabled: false },
@@ -82,6 +97,15 @@ export function createTray({ version, log, onQuit, onClearCooldown }) {
     items.push({ type: 'separator' });
     items.push({ label: `版本 ${version}`, enabled: false });
     items.push({ type: 'separator' });
+    // 托盘三入口（b2；设计 §1）：打开设置 / 打开交付目录 / 打开日志目录——未接线不显示死菜单项
+    const openItems = [];
+    if (typeof onOpenSettings === 'function') openItems.push({ label: '打开设置', click: guard('打开设置', onOpenSettings) });
+    if (typeof onOpenOutbox === 'function') openItems.push({ label: '打开交付目录', click: guard('打开交付目录', onOpenOutbox) });
+    if (typeof onOpenLogs === 'function') openItems.push({ label: '打开日志目录', click: guard('打开日志目录', onOpenLogs) });
+    if (openItems.length) {
+      items.push(...openItems);
+      items.push({ type: 'separator' });
+    }
     // 未接线该动作时（无回调）不显示死菜单项
     if (typeof onClearCooldown === 'function') {
       items.push({ label: '我已处理（清除外包工冷却）', click: clearCooldowns });
