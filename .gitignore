@@ -7,12 +7,13 @@ release/
 .browser-profile/
 
 # 探针产物（含页面/接口原始数据，按批保留、不提交）
-probe/out/
-probe/out2/
-probe/out3/
+probe/out*/
 
 # 临时文件
 *.log
 *.tmp
 .DS_Store
 Thumbs.db
+
+# 代理本会话的临时区（脚手架 / 隔离 userData / 试验产物，绝不提交）
+.thincoder/

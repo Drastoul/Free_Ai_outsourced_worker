@@ -73,7 +73,7 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 | 错误类 | 码 | 处置 |
 |---|---|---|
 | 瞬时（可重试） | `E_TIMEOUT` `E_NO_RESPONSE` `E_SEND_FAILED` `E_STREAM_PARSE` | 同一外包工重试 ≤ `retryPerWorker`（默认 2），退避 3s / 10s；耗尽 ⇒ failed |
-| 外包工不可用（可降级） | `E_LOGIN_REQUIRED` `E_CAPTCHA_OR_RISK` `E_SELECTOR_MISSING` `E_WORKER_UNAVAILABLE` | 该外包工置冷却（默认 10 分钟，或人工处理后清除）；任务转下一优先级；最多尝试 `maxFailoverWorkers`（默认 3）个外包工 |
+| 外包工不可用（可降级） | `E_LOGIN_REQUIRED` `E_CAPTCHA_OR_RISK` `E_SELECTOR_MISSING` `E_WORKER_UNAVAILABLE` | 该外包工置冷却（默认 10 分钟，或人工处理后清除——**载体 = 托盘菜单「我已处理（清除外包工冷却）」，粒度 = 全部外包工**）；任务转下一优先级；最多尝试 `maxFailoverWorkers`（默认 3）个外包工 |
 | 不可恢复 | `E_BAD_FILE` `E_BAD_ARGS` `E_OUTBOX_WRITE` | 不重试；直接失败（`E_OUTBOX_WRITE` 归 needs_human） |
 
 - 降级只发生在**预热阶段**（打开 / 登录检查 / 发送前）；进入 streaming 后不再换人（避免重复消耗平台额度）。
@@ -108,8 +108,8 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 
 ## 10. 与引擎子进程的接口（摘要）
 
-- 逐行 JSON-RPC（stdio）：`engine.health`、`task.run({taskId, worker, prompt, files, outboxDir, toggles})`、`task.cancel({taskId})`；`toggles` = 该外包工配置值（`{thinking, search}`，**主进程传入**——引擎不自行读配置，保持单一事实源；应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
-- 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok}`（形状见 `docs/design/overview.md` §3.2 第 7 步）。
+- 逐行 JSON-RPC（stdio）：`engine.health`、`task.run({taskId, worker, prompt, files, outboxDir, toggles})`、`task.cancel({taskId})`；**`worker` = 对象 `{id, name, platform}`**（与 manifest / TaskView 同形：`id` 定位 `<userData>/profiles/<workerId>/`、`platform` 选适配器）；`toggles` = 该外包工配置值（`{thinking, search}`，**主进程传入**——引擎不自行读配置，保持单一事实源；应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
+- 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok}`（形状见 `docs/design/overview.md` §3.2 第 7 步）；**失败 = result 内 `error: {code, message, hint?} | null`**（与 manifest 的 `error` 同形；**JSON-RPC error 仅用于协议级 / 内部异常**，不承载业务失败）；失败时 `delivery` / `toggles` 可缺席（缺席 ⇒ 视为未产出，不得为凑字段造值）。
 - 进度事件：`{event: "task-progress", taskId, phase}`（供 `get_task` 展示）。
 - 引擎崩溃：主进程重启引擎并置进行中任务 `E_ENGINE_DOWN`（可重派）。
 

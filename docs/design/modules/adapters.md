@@ -61,7 +61,7 @@ export default {
 - 只处理 `data:` 行；`event:` 行仅作事件分类；空载荷与 `[DONE]` 跳过；JSON 解析失败跳过。
 - 帧形态 A（首信息帧）：
   `{"v":{"response":{…,"fragments":[{"type":"RESPONSE","content":"…"}…]}}}`
-  ⇒ `type=RESPONSE` 的 content 入正文，`type=THINK` 入思考区；「当前路径」置为 `response/fragments/-1/content`。
+  ⇒ `type=RESPONSE` 的 content 入正文，`type=THINK` 入思考区；「当前路径」置为 `response/fragments/-1/content`。**首帧 content 是快照：必须累积；后续 APPEND 从其后续写、不重复（fixture 实证：`docs/batches/b1-core-loop.fixtures/raw-sse.txt:7` 首帧 `content="完成"`，`:9` 起才 APPEND 续写）。**
 - 帧形态 B（带路径帧）：`{"p":"…","o":"APPEND|SET|BATCH","v":…}`
   - p 命中内容路径（`/content` 或 `/thinking_content` 结尾）⇒ 追加 v 到对应区；
   - p 为其他（status / 元数据）⇒ **只更新当前路径指针，不追加**。
@@ -116,8 +116,9 @@ export default {
 
 ## 5. 验收判据
 
-- 单元（随批归档）：`stream.parse` 以 `probe/out3/raw-sse.txt` 为 fixture ⇒ 输出与 `probe/out3/answer-sse.md` 一致；
-  `extract.filesFromText` 以探针 3 的正文为输入 ⇒ 抽出 `greet.py` 与 `README.md`（与 `probe/out3/artifacts/` 对照）。
+- 单元（随批归档）：`stream.parse` 以 `docs/batches/b1-core-loop.fixtures/raw-sse.txt` 为 fixture ⇒ 输出与 `docs/batches/b1-core-loop.fixtures/answer-sse.expected.md` **逐字一致**（**108 字符** = 首帧快照「完成」2 + 后续 APPEND 106；无尾换行）；
+  `extract.filesFromText` 以该正文为输入 ⇒ 抽出 `greet.py` 与 `README.md`（对照 `probe/out3/artifacts/`）。
+  **基线更正说明**：`probe/out3/answer-sse.md`（106 字）是探针 3 解析器 bug 的产物（帧形态 A 的首帧快照 content 未被累积）——验收基线以本行为准，旧文件仅作探针考古，**不得作为验收判据**。
 - 集成：`npm run verify:loop`（真机，`delivery.transport = "sse"`；`manifest.toggles` 载荷核对 = AC-R8-1）。
 - 集成：`npm run verify:engine` 开关失败场景（本地 fixture 页无 `div.ds-toggle-button` ⇒ 判 `E_SELECTOR_MISSING` 且未执行发送 = AC-R8-3）。
 - 对应需求验收：AC-R3-2、AC-R3-4、AC-R8-1、AC-R8-3。

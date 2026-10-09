@@ -1,0 +1,89 @@
+event: ready
+data: {"request_message_id":1,"response_message_id":2,"model_type":"default"}
+
+event: update_session
+data: {"updated_at":1791472450.711478}
+
+data: {"v":{"response":{"message_id":2,"parent_id":1,"model":"","role":"ASSISTANT","thinking_enabled":false,"ban_edit":false,"ban_regenerate":false,"status":"WIP","incomplete_message":null,"accumulated_token_usage":0,"feedback":null,"inserted_at":1791472450.7007148,"search_enabled":true,"fragments":[{"id":2,"type":"RESPONSE","content":"完成","references":[],"stage_id":1}],"conversation_mode":"DEFAULT","has_pending_fragment":false,"auto_continue":false,"search_triggered":false,"extra_search_providers":[]}}}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":"\n\n"}
+
+data: {"v":"```"}
+
+data: {"v":"python"}
+
+data: {"v":"\n"}
+
+data: {"v":"#"}
+
+data: {"v":" file"}
+
+data: {"v":":"}
+
+data: {"v":" greet"}
+
+data: {"v":".py"}
+
+data: {"v":"\n"}
+
+data: {"v":"print"}
+
+data: {"v":"(\""}
+
+data: {"v":"hello"}
+
+data: {"v":"-outs"}
+
+data: {"v":"ource"}
+
+data: {"v":"\")\n"}
+
+data: {"v":"```\n\n"}
+
+data: {"v":"```"}
+
+data: {"v":"mark"}
+
+data: {"v":"down"}
+
+data: {"v":"\n"}
+
+data: {"v":"<!--"}
+
+data: {"v":" file"}
+
+data: {"v":":"}
+
+data: {"v":" READ"}
+
+data: {"v":"ME"}
+
+data: {"v":".md"}
+
+data: {"v":" -->\n"}
+
+data: {"v":"#"}
+
+data: {"v":" "}
+
+data: {"v":"外包"}
+
+data: {"v":"测试"}
+
+data: {"v":"\n"}
+
+data: {"v":"```"}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"accumulated_token_usage","v":149},{"p":"quasi_status","v":"FINISHED"}]}
+
+data: {"p":"response/status","o":"SET","v":"FINISHED"}
+
+event: update_session
+data: {"updated_at":1791472450.929848}
+
+event: title
+data: {"content":"输出两个文件内容"}
+
+event: close
+data: {"click_behavior":"none","auto_resume":false}
+

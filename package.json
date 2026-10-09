@@ -4,10 +4,20 @@
   "private": true,
   "type": "module",
   "description": "免费外包 —— 让主包AI调用网页版AI（DeepSeek 等）干活，并把结果与文件取回来",
+  "main": "src/main/index.mjs",
   "scripts": {
-    "probe:deepseek": "node probe/probe-deepseek.mjs"
+    "app": "electron .",
+    "probe:deepseek": "node probe/probe-deepseek.mjs",
+    "verify:mcp": "node --test test/integration/mcp-face.test.mjs",
+    "verify:engine": "node --test test/integration/engine.test.mjs",
+    "verify:loop": "node --test test/integration/loop.test.mjs",
+    "verify:runtime": "node --test test/integration/runtime.test.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "playwright": "^1.64.0"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0"
   }
 }

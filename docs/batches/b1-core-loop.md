@@ -3,7 +3,7 @@
 > 编制：主 agent · 2026-10-08 · 来源 = 用户需求文件《免费外包工具制作需求.txt》（2026-10-08）+ 第0步探针实测（free-outsource/probe/probe*.mjs 与 probe/out*/run.log）。
 > 台账 = #1–#6（免费外包 · 归批）。前情 = 无（独立批）。
 ## §1 讨论（主 agent）
-**状态行**：🔄 进行中（…）
+**状态行**：已收口 2026-10-09（自举验收通过（真实派单 done 14.4s + 取件两个）；四条命令绿、单元 27/27；台账 R1/R2/R3/R7/R8/R9 已核销，R4/R5/R6 待设计（随 b2/b4））
 <§1 模板占位：本批条目 / 关键判据 / 授权口径>
 
 ### 讨论记录（主包AI ↔ 用户）
@@ -112,6 +112,23 @@
 - **开关对应关系（R8 的跨平台落点，供 b3）**：请求选项里带 `thinking` / `enablePlugin` / `reasoningEffort` / `model`（如 `k2d6-chat`），tools 含 `TOOL_TYPE_SEARCH` / `TOOL_TYPE_CRON_JOB` ⇒ 外包工级「深度思考 / 联网搜索」在 Kimi 侧可映射到 `thinking` / 联网搜索 tool 开关。
 - **探针踩坑（已固化进脚本纪律，供 b1 适配器实现参考）**：① 未登录也能打字 ⇒ 判"答复到达"必须与"自己发的内容"区分（`role: user` / 类名含 `user` 一律排除）；② 整页 `document.body.innerText` 会把大页面主线程拖住 ⇒ 只用点选式查询 + 每步限时；③ 发送判据以网络请求为准，不靠 DOM 猜。
 - 脚本与产物：`probe/probe9-kimi-login-check.mjs`、`probe10..13-kimi-*.mjs`、`probe/out12|out13/`（含全量流 `out13/chat-resp.txt`）。
+
+### 实施期裁定与基线更正（2026-10-09，主包AI）
+
+- **引擎面上抛①（设计档 §3.3 与验收基线冲突）**：取证 `docs/batches/b1-core-loop.fixtures/raw-sse.txt`（= 原 `probe/out3/raw-sse.txt` 原件）——首帧（`:7`）帧形态 A 的 `fragments[0].content = 完成`，其后 `:9` 起才是 APPEND 续写（不从「完成」重复）。
+  ⇒ **设计档 §3.3 正确**（首帧快照必须累积）；**旧基线 `probe/out3/answer-sse.md`（106 字）是探针 3 解析器 bug 的产物**（首帧快照被丢）。
+  正确基线 = 从 fixture 重新推导：**108 字符**（「完成」2 + APPEND 106，无尾换行），落 `docs/batches/b1-core-loop.fixtures/answer-sse.expected.md`。
+  同时把 fixture 收进批次档目录（原件在 `probe/out*/`，已被 `.gitignore` 排除 ⇒ 测试会依赖仓库里不存在的文件）；设计档同步（`docs/design/modules/adapters.md` §3.3 首帧快照语义显式化 + §5 验收基线改批次档 fixtures 并附更正说明）——**主包AI 直改（小改，可回退）**。
+- **引擎面上抛②（行分隔 JSON-RPC 信封未定）**：裁定 = 标准 JSON-RPC 2.0 信封（请求 `{jsonrpc,id,method,params}`，响应 `{jsonrpc,id,result}`，协议级错误 `{jsonrpc,id,error:{code,message,data}}`，入参容忍裸形）；**业务/任务失败走 `result.error`（与 manifest 同形）**，JSON-RPC error 仅承载协议级/内部异常；`task.run` result = `delivery` + `toggles` + `canceled`；`task.cancel` ⇒ `{canceled:bool}`；取消中的任务 ⇒ 成功响应 `canceled:true` + `delivery.partial:true`；进度事件按 scheduler §10 字面。已同源同步 #27 / #28。
+- **主进程面上抛（实施期首条）**：`task.run` 的 `worker` = 对象 `{id, name, platform}`；失败回报走 `result.error`。已钉进 `docs/design/modules/scheduler.md` §10（主包AI 直改·小改）。
+
+### 轻通道改动（2026-10-09，用户决定「先按你的试试」；主包AI 直改，可回退）
+
+- **触发**：用户观察到 17873–17893 全被占（取证：源头是我方实施/测试进程，非外部软件）。
+- **改动（a）端口顺延上限 20 → 120**：`src/main/mcp/server.mjs`（`MAX_PORT_OFFSET` 常量 + 3 处注释）· `src/main/index.mjs`（1 处注释）· `docs/design/overview.md` §2.3（`+1` 顺延最多 +120 / +120 内全被占终局）与 §5 错误与人工接管表（顺延上限 +120）。
+- **改动（c）①「端口被占怎么办」节 + 数字对齐**：`docs/guide/agent-onboarding.md` 由**验收面任务（#29）**在其文件域内同步（主包AI 已发指令，含 +120 口径与该节内容清单）。
+- **性质/分类说明**：属**参数与文案**类改动（阈值 + 指引文案），按轻通道口径执行：主包AI 直接落地、单次可回退；**不改动机制、不改契约、不新增错误码**。
+- **验证**：`node --check` 通过；端口占用顺延行为不变（仍为「期望端口被占 ⇒ +1 顺延」，仅上限放大）。
 
 ## §2 批次任务与设计（eng-designer）
 **状态行**：设计完成（轮次 3 评审修复（P1–P10）已落盘（2026-10-09）；待主包AI 核验、用户复审）
@@ -387,4 +404,300 @@ VERDICT: pass
   5. 台账推进（#1–#9 由「待讨论」推进到「在途」，交付核验后走「待核销 → 已核销」）
 
 ## §5 实施记录（eng-coder）
+**状态行**：实施完成（修复轮：托盘「我已处理（清除外包工冷却）」+ Workforce.clearAllHealth()；自证 16/16 + 主进程端到端 13/13；评审 1 轮 pass）
+
+
+
+### 交付摘要（主进程面 · b1 实施顺序第 1/2/5/6 步）
+
+**交付物**：Electron 托盘应用骨架（单实例 / 托盘 / 生命周期 / `runtime.json`）· 配置存储（`<userData>/config.json` 原子写 + `.bak` + schema 校验）· MCP 服务面（双传输 `/mcp` + `/sse`+`/messages`、六件套、19 条错误码、`/healthz`、端口顺延 ≤+20、可选 token）· 任务调度（队列 / 选人 / 重试降级 / 阶段超时看门狗 / 取消 / 补件）· 交付落盘（outbox 实际路径解析与回落 / manifest 单一写者 / 命名净化 / 重启 `interrupted` 扫描）· 引擎客户端（stdio 行分隔 JSON-RPC 2.0）· `package.json`（`main` / `app` + 四条 `verify:*` 脚本 / 依赖与锁文件）。
+
+**自证（命令 + 读数）**：
+
+- `node --check` × 18 个 `.mjs` + `package.json` JSON 解析 —— 全过。
+- 临时驱动 `.thincoder/tmp/b1-main-check.mjs`（真 Electron 启停 + MCP 协议面 + 端口场景）：**40/40 通过**（runtime.json 六字段 / pid 判活 / `/healthz` 200 含 ok·version·port·workers / initialize 与「仅 tools」能力 / `tools/list` 恰六件套 + schema 齐全 + 中文 description / 错误路径 `E_BAD_ARGS`·`E_WORKER_UNKNOWN`·`E_TASK_UNKNOWN` / 旧式 SSE 全链 / token 401·200 / 17873 占用 ⇒ 17874 且日志明示 / +20 全占 ⇒ 服务不启动 / 优雅退出删 runtime.json / 非 127.0.0.1 拒连 / 测试卫生）。
+- 临时驱动 `.thincoder/tmp/b1-scheduler-check.mjs`（假引擎驱动调度器，不触浏览器）：**53/53 通过**（派单即写 manifest（worker/selection）/ done 落盘 / 瞬时重试 3s 退避 / 降级换人 + 冷却映射 / b1 单外包工 `E_SELECTOR_MISSING` ⇒ needs_human / 硬绑定不降级 / `E_WORKER_DISABLED` / 排队与取消 / 执行中取消 / 补件（queued 与 opening 重启两路）/ `E_TASK_ALREADY_SENT` / outbox 回落 + 重启标记 + 净化 + 越界 / 配置默认 + `.bak` + 非法隔离 + 19 条错误码 / 引擎崩溃 ⇒ failed `E_ENGINE_DOWN` / `E_NO_WORKER` / 长轮询 / `perWorkerConcurrency` 生效）。
+- 结构：19 个交付文件全部 ≤ 300 行（最大 `scheduler.mjs` 295 行）。
+
+**结构整改（本轮追加要求）**：`scheduler.mjs` 728 行 ⇒ 拆为 4 个内聚文件（对外接口与协议不变）；`config.mjs`（302）/`engine-client.mjs`（319）/`tools.mjs`（321）越 300 行评审线 ⇒ 各拆出纯面/声明面文件。切分图见交付报告。
+
+**决策透明表**
+
+| # | 决策 | 依据 |
+|---|---|---|
+| D1 | 用 SDK 低层 `Server` 自管 `tools/list` + `tools/call`（不用 `McpServer.registerTool`） | 契约要求「任何失败都给 `{code,message,hint}` 信封 + `isError`」；SDK 高层对缺参/类型错只回纯文本校验错误 |
+| D2 | `task.run` 的 `worker` = 对象 `{id,name,platform}`；任务失败走 `result.error`；JSON-RPC error 仅协议级 | 主包AI 2026-10-09 裁定（两侧同源）；客户端另保留两种事件封装的宽容解析 |
+| D3 | `attach_files`：queued ⇒ 追加；running(opening/uploading) ⇒ 追加 + `task.cancel` + 同一任务以完整文件列表重启该次预发送执行；sending 之后 ⇒ `E_TASK_ALREADY_SENT` | 引擎接口（scheduler.md §10）无补件方法；重启发生在发送前、不消耗平台额度；相位上报延迟窗口已在代码注释与交付报告披露 |
+| D4 | 阶段超时由主进程看门狗按阶段表执行；streaming 用 `taskTimeoutMs`→`E_TIMEOUT`（「首字节 120s→`E_NO_RESPONSE`」由引擎侧判）；finalizing（表外相位）按 `extractingMs`→`E_OUTBOX_WRITE` | policy.mjs 注释明示；表外相位属设计表缺口（已上抛） |
+| D5 | 派单期交付目录不可用 ⇒ 同步拒绝 `E_OUTBOX_WRITE`（超出 mcp-server.md §3.2 封闭枚举一条） | 不静默：无法建任务目录时只有这一条诚实报错路径；已上抛请设计侧补该行 |
+| D6 | 开发/运维接缝：env `FO_USER_DATA`（userData 覆盖）+ `--quit`（第二实例请首实例退出；ready 前退出带 2s 强制兜底） | 测试需要确定性启停；`--quit` 可复用给 `verify:runtime` 自控启停；未入设计档，已上抛备档 |
+| D7 | `electron` 置 devDependencies（非 dependencies） | 批次档 §1 打包冒烟实测：electron-builder 拒绝 electron 出现在 dependencies（b4 必读） |
+| D8 | `limits.timeouts` / `limits.maxFileBytes` 透传引擎（`task.run` 可选覆盖项） | 配置改动对引擎同样生效，避免双侧默认值漂移 |
+
+**审计与代码评审轮次与终态**
+
+- **轮次 1 —— 内部偏差审计（explore 子代理，只读）**：结论「有偏差」：1 条低severity 静默简化（`perWorkerConcurrency` 配置被接受但调度器未读取）+ 4 条记录项（`E_OUTBOX_WRITE` 超集 / finalizing 表外映射 / 两个开发接缝未入设计档 / 出队降级不计入已尝试集合）。**已修**：前两条（见 fix round F1/F2）；后三条属设计文档面，保持实现 + 上抛。
+- **轮次 2 —— 内部代码评审（advisor，独立只读，type=code）**：10 条发现（🟡 5 · 🔵 5），无 🔴、无 must-fix；终态 **VERDICT: pass**。逐条处置见交付报告响应表：F3–F7 已修；F8（`readManifestSync` 死代码）已删除；F9/F10（两个文档未列的码路径）保持实现 + 上抛文档侧。
+- **fix round 记录**：
+  - F1 `perWorkerConcurrency` 真正生效（`TaskRunner.activeCountFor` + `pump` 判定）——T12 用例验证。
+  - F2 已尝试集合跨「排队期降级」累计（`t._triedWorkers`，随任务持有）——T3 断言验证。
+  - F3 执行前复核分支 `sawStreaming` 改用 `run.sawStreaming`（与正常分支同源）。
+  - F4 `cancel_task` 描述改为「是否部分交付见交付目录 manifest 的 `delivery.partial`」（不再承诺 TaskView 字段）。
+  - F5 `cancel` 先落终态再通知引擎（幂等通知只对 running 任务发出），消除退避窗口内「取消后仍再发一轮」的窗口。
+  - F6 会话级 Server 实例随 transport 关闭释放（`sessions.delete`）。
+  - F7 引擎响应超时改归 `E_TIMEOUT`（`E_ENGINE_DOWN` 只留进程不可用/写入失败）。
+  - F8 删除死代码（`Scheduler.onProgress` 与 `outbox.readManifestSync`；`dirHasWriteAccess` 保留并注明 b2 用途）。
+  - 每轮修复后重跑两套自证：`b1-scheduler-check` **53/53**、`b1-main-check` **40/40**（最终态全绿）。
+
+**未写入项**：无（§5 已由本段写入）。
+
+**上抛 / 未决**：见交付报告「上抛项」与「未验证项」两节（设计文档侧 3 条 + 协调项 1 条 + 运行期不可静态验证项 2 条）。
+
+**状态行**：✅ 实施完成（工程侧自证 + 独立代码评审两轮收敛；4 条上抛项待主包AI / 用户裁定）
+
+### 交付范围与切分图
+
+交付面 = 引擎子进程（进程形态 / 浏览器引擎 / 适配器接口与注册表 / DeepSeek 首实现 / 取件落盘 / 协议服务端）。
+结构整改（主包AI 追加要求）：`host.mjs` 由 731 行按内聚拆分，**全部 16 个文件 ≤300 行**（host.mjs 164）。
+
+```
+src/engine/
+  host.mjs               164  协议面：stdio 行分隔 JSON-RPC 2.0 服务端 + 引擎装配（health / shutdown）
+  task-runner.mjs        281  任务编排：phase 链 / 每外包工锁 / 取消 / 阶段预算 / result 回报
+  answer.mjs             168  答复采集：流捕获（含请求载荷）/ 流为主 + DOM 兜底 / 开关应用与日志
+  artifacts.mjs          209  产物落盘：命名净化·重名·原子写 / 取件三层落盘 / 附件留证 / skippedFiles
+  opening.mjs             41  opening：打开平台页 + 登录态判定（轮询与早退）
+  failure.mjs             55  失败收尾：失败截图 + 业务失败回报形状 {code,message,hint?,screenshot?}
+  staging.mjs             99  下载暂存区台账：落盘就绪判定 / 按建议名归位 / 任务归属收口
+  browser.mjs            250  BrowserHost：持久上下文 / CDP 自动落盘 / 下载事件 / hub 页处置 / 崩溃重取
+  browser-config.mjs      73  配置与路径：userData（FO_USER_DATA）/ 配置窥视（FO_CONFIG_FILE）/ 启动选项
+  util.mjs                42  日志 / 延时 / 余量 / withDeadline（阶段预算收口）
+  adapters/
+    base.mjs              68  适配器接口 + 能力声明 + EngineError
+    registry.mjs          25  注册表（加平台＝加模块）
+    deepseek.mjs         150  DeepSeek 适配器对象（接口实现 + 纯函数：载荷读键 / 代码块抽取）
+    deepseek-page.mjs    268  页面机械：元素台账 / 开关五级兜底 + aria 复核 / 输入发送 / 上传 / 登录判定
+    deepseek-dom.mjs      56  DOM 侧取件：兜底文本拼接 / 下载按钮定位点击
+    deepseek-stream.mjs  105  SSE 解析纯函数（帧 A/B/C + FINISHED 判定）
+```
+
+### 协议与口径（按主包AI 裁定实现）
+
+- 行分隔 JSON-RPC 2.0 over stdio；stdout 只出 JSON-RPC 行、日志走 stderr；方法 `engine.health` / `task.run` / `task.cancel` / `engine.shutdown`。
+- `task.run` 的 `worker` = 对象 `{id, name, platform}`；业务 / 任务失败走 **`result.error:{code,message,hint?}`**（JSON-RPC error 仅协议级 / 内部异常）；进度事件 `{event:"task-progress",taskId,phase}`；取消中的任务 ⇒ 成功响应 `canceled:true`（+ 部分 `delivery.partial=true`）。
+- `requestPayloadCapture`：捕获 `chat/completion` 请求体读出 `thinking_enabled` / `search_enabled`，随回报清单交回 `toggles:{configured,payload,ok}`。
+
+### 自证读数（脚本在 `.thincoder/tmp/b1-engine/`，跑完即退）
+
+| # | 命令 | 读数 |
+|---|---|---|
+| 1 | `node --check` × 16 文件 | 全部 OK |
+| 2 | `node 00-units.mjs` | 15/15 通过：`stream.parse(raw-sse fixture)` 与 `answer-sse.expected.md` **逐字一致（108 字符、无尾换行）**；帧 A 首帧「完成」已累积；FINISHED 不混正文；抽出的 `greet.py` / `README.md` 与 `probe/out3/artifacts/` 逐字节一致 |
+| 3 | `node 01-smoke-health.mjs` | `engine.health` 应答正常；缺参 ⇒ `result.error:E_BAD_ARGS`；`task.cancel`（未执行中）⇒ `canceled:false`；`engine.shutdown` ⇒ `{ok:true}` |
+| 4 | `node 02-download-cdp.mjs` | 本地页 blob 下载 ⇒ 下载事件触发 → CDP 自动落盘至暂存区（35B，内容一致）→ 归属移入 `files/`（净化命名 + sha256）→ 浏览器存活 |
+| 5 | `node 03-deepseek-task.mjs` | 真机最小任务（复用 `.browser-profile` 登录态）：`error=null`、`delivery.transport=sse`、`textPath=answer.md`、`files=[engine_probe.py]`、`toggles.payload={thinking_enabled:false,search_enabled:false}`、`ok=true`、6 个 phase 事件齐备、约 17–20s |
+| 6 | `node 04-adapter-fixtures.mjs` | 本地 fixture：登录页 ⇒ `login_required`、风控页 ⇒ `captcha`、正常页 ⇒ `ready`；无开关元素 ⇒ `E_SELECTOR_MISSING`（不发送）；`send` 文本落入输入框；DOM 兜底拼接正确 |
+| 7 | `node 05-cancel.mjs` | 真机长答复中发 `task.cancel` ⇒ 0.9–1.0s 内成功响应 `canceled:true`（不抛错）；页面不关闭、引擎仍可用 |
+| 8 | `node 06-skipped-and-naming.mjs` | 超 `maxFileBytes` ⇒ `skippedFiles` 记于 result **顶层**（`delivery` 内不含，对齐主进程读取面）；穿越名 / 保留名 / DEL 控制字符 / 长名 ≤120 净化正确 |
+
+### 评审轮次与终态
+
+- 独立代码评审（advisor · code）：**轮次 1 = changes-required**（1🔴 / 6🟡 / 5🔵）→ 修复轮（声明 10 项 + 评审新发现 2 项）→ **轮次 2 = pass**（8 Fixed / 1 Accepted（长扩展名边界保留引擎侧封顶，理由成立）/ 3 Unfixed（均非 must-fix）/ 2 New（非阻塞，已再加固））。
+- 内部背离审计（explore 子代理）：**未能运行**——拉起返回 429（余额不足 / 无可用资源包）；如实披露，未以其他手段替代。
+- **终态 = converged（评审收敛）**；explore 审计缺席一项如实标注。
+
+### 实施期自发现并修复的缺陷（活证据）
+
+1. CDP `Browser.setDownloadBehavior` 绑定在发出命令的会话上——**detach 即失效**（三组对照实测：detach ⇒ 文件落到 Playwright 工件目录；不 detach ⇒ 落到暂存区建议名）。实现改为保留 CDP 会话。
+2. Edge 的 `edge://downloads-hub/` 页面**无法关闭**（`page.close()` 挂起，12s 超时实测）⇒ 实现改为「不阻塞的后台关闭尝试」，不再拖住任务收尾。
+3. 浏览器上下文关闭后仍等下载 ⇒ 白等满 extracting 预算；实现加「上下文已关即早退」。
+4. 平台点「下载」会关掉来源标签页（`probe/out5/run.log` 同观），最后一个标签关闭即浏览器退出、下载中断 ⇒ 留一个保活空白页。
+5. 真机「点下载」在本机 Edge 上仍触发浏览器崩溃（`.browser-profile/Crashpad/reports` 每轮新增 `.dmp`，probe5 同现象）；CDP 行为已生效（`.crdownload` 落在暂存区）但收口不了 ⇒ 取件层① 真机不可用、按设计「不中断任务」降为②③（本地机制自证见读数 4）。
+
+### 披露（实现口径与设计档的差异 / 需更新的文档）
+
+- 引擎启动选项来源 = env（`FO_USER_DATA` / `FO_CONFIG_FILE` 来自主进程；`FREE_OUTSOURCE_*` 为引擎侧开发别名）→ `config.json` 的 browser 段 → 出厂默认；`browser-engine.md` §3 未写这两个来源。
+- `mode` / `channel`：实现为「显式 channel 优先」⇒ 出厂配置（`mode=chromium` + `channel=msedge`）实际启动系统 Edge，与 `browser-engine.md` §3 的 `channel: mode === 'edge' ? 'msedge' : undefined` 相悖（上抛 1）。
+- 点「下载」前新增「等 DOM 稳定」步骤（探针 6 流程）；`openSession` 按钮缺失时回退重新导航。
+- 设计档 §3.3 的文件计划与实际切分不一致（模块图 / 受影响文件表待 eng-designer 更新，上抛 3）。
+
+### 上抛项（请主包AI / 用户裁定）
+
+1. **`mode` / `channel` 语义**（`browser-engine.md` §3 ↔ 出厂配置 ↔ 引擎实现三处取一）；b4 打包（随包 Chromium）前必须定。
+2. **真机取件层①**：本机 Edge 点下载即崩（`.dmp` 证据 + probe5 同现象）；是否接受「层①仅本地机制成立、真机按②③交付」，或另行排查（换 channel / 版本组合）。
+3. **文档回调**：`src/engine/**` 文件清单与行数预估（设计档 §3.3）按实际切分更新；§2「受影响文件」表补新增文件。
+4. **单元测试件归属**：`docs/batches/b1-core-loop.units.mjs` 属验收面（#29）；本批自证脚本在 `.thincoder/tmp/b1-engine/`（不随包），如需归档请指派。
+
+### 边界声明与收工自查
+
+- 未改动：`src/main/**`、`src/shared/**`（仅只读引用）、`docs/**`、`probe/**`（仅只读参考）、`.browser-profile/**`（未删除未重置；真机运行仅由 Chromium 正常读写，与探针一致）。
+- 新增文件均在 `src/engine/**` 内（主包AI 已确认「新增文件属你的面」）；仓库内无临时产物（脚本与产物都在 `D:\免费外包\.thincoder\tmp\b1-engine\`）。
+- 收工自查：无自起 node / 浏览器残留进程；17873–17893 无监听。
+
+### 交付摘要（验收面与交付文档 · 续段）
+
+**交付物**：① 单元测试（随批归档，4 个文件：入口 + 引擎面 + 交付面 + 调度面，**26 例**）；② 四条集成验收命令的测试实现（`verify:mcp` / `verify:engine` / `verify:loop` / `verify:runtime`，含文档断言模块 `mcp-face.docs.mjs`）；③ 两份随包文档（R7① `docs/guide/agent-onboarding.md`、R7④ `docs/guide/agent-brief.md`）。
+
+**自证（命令 + 读数，2026-10-09；全部为终态重跑读数）**
+
+- `node --test docs/batches/b1-core-loop.units.mjs`：**26/26 通过**（≈0.2s）。SSE 解析（批次档 fixture ⇒ 与 `answer-sse.expected.md` 逐字一致、108 字符、无尾换行；FINISHED 不入正文；帧 A/B/C 与 BATCH quasi_status 形态）；代码块提取（`greet.py` / `README.md` 与 `probe/out3/artifacts/` 逐字节一致）；命名净化与上限（穿越 / 保留名 / 长度 / 重名 / 超限 skippedFiles / 越界拒绝 / 目录解析）；选人（优先级 / 忙排队 / 降级 / 硬绑定 / 冷却映射）；状态机（终态与 needs_human 分界、TaskView/manifest 形状）；manifest 原子写与重启扫描（interrupted 幂等、终态不动）。
+- `npm run verify:mcp`：**1/1 通过**（1.9s）—— initialize（能力仅 tools）/ `tools/list` 恰六件套 + schema 齐全 + 中文 description / `/healthz` 载荷 ok·version·port·workers / 错误路径（空 task ⇒ E_BAD_ARGS、未知 worker ⇒ E_WORKER_UNKNOWN、未知 taskId ⇒ E_TASK_UNKNOWN，三者均不建任务）+ 文档断言（① 四节 + R9 两节 + 「本工具端点配置」节；④ 五要素；内嵌 JSON 片段可解析 + 两形态字段形状 `mcpServers` 对象形 + `url` / `mcp.servers` 数组形；工具清单与 `tools/list` 对照；runtime.json 六字段与实测键一致）。
+- `npm run verify:engine`：**3/3 通过**（24s）—— 本地 blob 页：下载事件 → CDP 自动落盘暂存区 → 归属移入 `files/`（含穿越名净化与重名序号重放）；同一 profileDir 连续两次 launch 复用成功；fixture 页无 `div.ds-toggle-button` ⇒ `E_SELECTOR_MISSING` 且**未执行发送**（AC-R8-3 引擎侧，含失败截图）。
+- `npm run verify:runtime`：**2/2 通过**（4.9s）—— 占住 17873 ⇒ 顺延（落 +120 区间 17874–17993）、`runtime.json` 六字段 / 日志 / 按实际端口探活三处一致、`pid` 判活、优雅退出删文件；期望端口写入配置（文件手改通道）+ 重启 ⇒ 以新端口服务、`runtime.json` 随动。
+- `npm run verify:loop`：**1/1 通过**（真机）—— taskId=20261009-200714-77fe；**任务时长 16.8s**（任务自身 `timings`，≤180s）；phases = opening>streaming>extracting；`delivery.transport=sse`；`files=[verify_loop.py(code_block,47B)]`；`manifest.toggles` configured `{thinking:true,search:false}` ↔ payload `{thinking_enabled:true,search_enabled:false}`、`ok=true`（AC-R8-1）；`fetch_result` 文本与文件清单一致。
+- 全部改动文件 `node --check` 通过；每个文件 ≤300 行（按设计档 §3.3 拆分）。
+
+**决策透明表**
+
+| # | 决策 | 依据 |
+|---|---|---|
+| D1 | 四条 verify **一律自控应用启停**（隔离 `FO_USER_DATA` 于 `.thincoder/tmp/`），非只 `verify:runtime` | 读数可复现、不依赖「操作者先起应用」；`verify:loop` 必须自控（需 `FREE_OUTSOURCE_PROFILE_DIR` 复用 `.browser-profile` 登录态）。与 §2 命令清单头注「除 verify:runtime 外需应用已启动」不同源 —— **已披露**，请主包AI 核验是否接受 |
+| D2 | 起应用一律 `delete env.ELECTRON_RUN_AS_NODE`；跑完用 `--quit` 优雅退出 | 主包AI 实施期口径（不剥 ⇒ electron 以纯 Node 模式启动 = 假失败） |
+| D3 | 按 300 行线**按测试对象拆分**：`units.{engine,outbox,scheduler}.mjs`、`mcp-face.docs.mjs`；入口以静态 import 聚合，`node --test 入口` 仍一次跑全 | 设计档 §3.3「任一文件超 300 行 ⇒ 按测试对象拆分」；实测 `node --test <入口>` 会执行被 import 模块注册的用例 |
+| D4 | `verify:loop` 不锁平台侧文件名，只断言 AC-R3-1 的 `files/ ≥1` + 文件清单形状 / 落点 / 来源 | 真机实测平台有两种形态：一次 code_block（`verify_loop.py`）、一次「文件/画布」⇒ 下载层落 `deepseek_python_<日期>_<hash>.py`；过严名字断言会把正确实现判红 |
+| D5 | AC-R3-1 的「≤180s」以任务自身 `timings`（finishedAt−createdAt）为准；墙钟耗时只作读数 | 5s 长轮询的检测滞后会把墙钟推过预算（评审 🔵#4） |
+| D6 | 读 manifest 做 ≤15s 有界等待（实测落盘滞后 ≈260ms） | 主进程任务终结落盘是异步的（`execution`/`scheduler` 的 `persistSoon` 非阻塞），MCP 已报 done 时文件可能差一拍 —— 见「上抛项」 |
+
+**审计与代码评审轮次与终态**
+
+- **内部偏差审计（explore 子代理，只读）**：**未能运行** —— 拉起返回 429（余额不足 / 无可用资源包）；如实披露，不以其他手段替代（与此前引擎面同现象）。
+- **内部代码评审（advisor，独立只读，type=code）**：**轮次 1 = pass**（🟡 1 · 🔵 4；无 🔴、无 must-fix）。逐条处置：
+  - 🟡 设计档 `docs/design/modules/outbox.md` §8 的单元验收项「manifest 原子写」在交付单元面内无对应用例（与 `docs/design/overview.md` §13 单元范围存在跨档不一致）→ **已修**：`units.outbox.mjs` 补 2 例（manifest 原子写往返 / 覆写生效 / 无 `.tmp` 残留；重启扫描 interrupted 独立标记且幂等、终态不动）⇒ 单元 24 → **26 例**。
+  - 🔵#2 `verify:runtime` 场景 2 端口写死 18010/18011 → **已修**（改 `freePort()` 动态取空闲端口）。
+  - 🔵#3 场景 1 `blockPort(17873)` 在 17873 已被占用时直接 reject → **已修**（占位失败按「已被占用」继续，响应性检查按实况分支）。
+  - 🔵#4 `verify:loop` 用墙钟 elapsed 作时长判据（含轮询检测滞后）→ **已修**（改用任务 `timings`；墙钟留作读数 + 宽松护栏）。
+  - 🔵#5 三处 `freePort()` 的 reserve→close→bind 竞态 → **保留并披露**（已知低概率；应用侧绑定失败会顺延并被断言捕获）。
+- **终态 = converged**（评审 1 轮即 pass；可选 🔵 修复后重跑全套自证：单元 26/26、mcp 1/1、engine 3/3、runtime 2/2、loop 1/1 真机）。**explore 审计缺席一项如实标注**。
+
+**未写入项**：无（本段即 §5 续段；§5 状态行仍为上一段所设「✅ 实施完成」，未改动）。
+
+**上抛 / 未决**：见交付报告「上抛项」（① manifest 落盘异步观察；② 平台侧产物形态波动；③ explore 审计 429；④ 命令清单头注口径差异 D1）。
+
+### 修复轮：人工清除外包工冷却（缺陷修复 · 实现与设计不符）——2026-10-09
+
+**来源**：批次档 §6「并批发现」#33（父代理派单，2026-10-09）：设计档 `docs/design/modules/scheduler.md` §6 规定不可用类错误冷却「默认 10 分钟，**或人工处理后清除**」，而实现中唯一清冷却点 = 任务成功（`src/main/scheduler/execution.mjs:177`），**无人工清除路径** ⇒ 用户按 ① 指南在浏览器窗口登录后重派，被 `E_NO_WORKER（跳过：DeepSeek:E_LOGIN_REQUIRED）` 挡住最多 10 分钟。
+
+**改动面（3 文件，均在批准的改动范围内）**
+
+| 文件 | 改动 |
+|---|---|
+| `src/main/scheduler/workforce.mjs` | 新增 `clearAllHealth()`：逐条清冷却、返回被恢复的外包工名；无冷却 ⇒ 返回空数组、不报错 |
+| `src/main/tray.mjs` | 菜单新增「我已处理（清除外包工冷却）」项；`createTray` 增 `onClearCooldown` 接缝；用户反馈文案（「已恢复：X」/「当前没有处于冷却中的外包工」/「服务尚未就绪」）；原先内联在返回对象里的 `notify` 提为局部函数（对外形状不变：仍 `{update, notify, destroy}`） |
+| `src/main/index.mjs` | 一行接线：`onClearCooldown: () => (scheduler ? scheduler.workforce.clearAllHealth() : null)` |
+
+**自证读数（命令 + 读数）**
+
+- `node --check` × 3 个改动文件：**3/3 OK**。
+- `node --test docs/batches/b1-core-loop.units.mjs`：**26 pass / 0 fail**（约 0.23s）。
+- `npm run verify:runtime`：**2 pass / 0 fail**（4.99s）。
+- 自证脚手架 A（`.thincoder/tmp/b1-fix-clear-cooldown/clear-cooldown-check.mjs`；真实 `createTray` 托盘 + 真实 `Scheduler`/`Workforce`/执行器冷却路径 + 假引擎，捕获真实菜单模板后调用真实 `click`）：**16/16**。关键读数：无冷却点菜单 ⇒ 中性提示且不抛错；派单落 `E_LOGIN_REQUIRED` ⇒ `list_workers` = `login_required` ⇒ 重派被拒 `E_NO_WORKER`（与父侧读数同）；点菜单 ⇒ 「已清除外包工冷却 — 已恢复：DeepSeek」⇒ `list_workers` = `ready` ⇒ 重派受理并跑完 done；「成功路径只清自己」（w-1 ready / w-2 仍 unavailable）。
+- 自证脚手架 B（`.thincoder/tmp/b1-fix-clear-cooldown/app-e2e-check.mjs`；**真实应用入口** + 真实 MCP 面 + 真实托盘菜单项；冷却来自真机跑一次 = 隔离 userData 全新浏览器 profile 未登录）：**13/13**。关键读数：`runtime.json` port=55964；`list_workers` = ready；真机任务 `20261009-203833-bb94` 落 needs_human / E_LOGIN_REQUIRED；`list_workers` = login_required；重派被拒 `{"code":"E_NO_WORKER","message":"派单时无任何可用外包工；跳过：DeepSeek:E_LOGIN_REQUIRED"}`（复现父侧读数）；点菜单 ⇒ 日志「通知：免费外包：已清除外包工冷却 — 已恢复：DeepSeek」⇒ `list_workers` = ready ⇒ 重派受理（taskId=20261009-203842-6f34，不再 `E_NO_WORKER`）。
+
+**决策透明表**
+
+| # | 决策 | 依据 |
+|---|---|---|
+| F1 | 清除粒度 = 全部外包工（不逐个） | 任务书指定「清除**全部**外包工冷却」；b1 单外包工等效 |
+| F2 | 反馈文案由托盘面组装（回调只返回名字数组），`index.mjs` 仅一行接线 | 用户可见文案归属托盘面；调用面窄、可测 |
+| F3 | 服务尚未起来（scheduler 为 null）⇒ 回调返回 null ⇒ 托盘给「服务尚未就绪」中性提示，不报错 | 任务书「无冷却时应给中性反馈而不是报错」的同源口径 |
+| F4 | 未接线 `onClearCooldown`（非函数）⇒ 不显示该菜单项 | 评审 🔵#2 处置（不显示死菜单项） |
+| F5 | 不改 `execution.mjs:177`（成功即清冷却） | 任务书「回归保持」；脚手架 A 实测其逐外包工语义不变 |
+
+**审计与代码评审轮次与终态**
+
+- **内部偏差审计（explore 子代理，只读）**：**未能运行** —— 拉起返回 429（余额不足 / 无可用资源包）；如实披露，未以其他手段替代（与本批此前两段同现象）。
+- **内部代码评审（advisor，独立只读，type=code）**：**轮次 1 = pass** —— 1 🟡（设计档 §6 未指明清除的载体与粒度、`overview.md` §5「人工接管入口」未列该动作 ⇒ 跨档滞后，非 must-fix）+ 4 🔵；无 🔴、无 must-fix。
+- **fix round**：F4 已落（评审 🔵#2）。其余三条经研判不落，理由：🟡#1 属 `docs/**`（授权面外，上抛父代理文档层）；🔵#3 全局粒度系任务书裁定（保持现状）；🔵#4 归档单元用例落在 `docs/batches/**`（授权面外，上抛）。
+- **终态 = converged**（评审 1 轮即 pass，无 must-fix）。**explore 审计缺席一项如实标注**。
+
+**未写入项**：无（本段已写入）。
+
+**上抛 / 未决**：① 设计档 `scheduler.md` §6 与 `overview.md` §5「人工接管入口」需补「人工清除的载体（托盘菜单）与粒度（全部）」并给一条可复现判据（父代理文档层）；② 归档单元套件（`docs/batches/b1-core-loop.units.*.mjs`）可补 `clearAllHealth` 用例，使该修复不随临时脚手架清理失去回归覆盖（父代理定夺）；③ 用户可见提示仍为旧口径 —— `src/engine/task-runner.mjs:155`、needs_human 通知文案、`docs/guide/agent-onboarding.md:83/85/86`、`docs/guide/agent-brief.md:96/97` 均未提及托盘动作（维护面外，上抛）。
+
+**边界声明**：未动 MCP 契约与错误码表 · `src/engine/**` · `docs/**` · `probe/**` · `.browser-profile/**`；未引入新依赖；收工无自起进程残留（17873 上的监听 = 工作前既有的产品实例 PID 5792，非本轮所起、未予处置）。
+
+**状态行**：✅ 实施完成（修复轮）
+
 ## §6 验证与收口（父代理）
+
+### 父侧核验记录（进行中 · 2026-10-09）
+
+**#27 主进程面 —— 已核验通过（父侧独立核验，不复用交付方脚本）**
+- 核验脚本：`D:\免费外包\.thincoder\tmp\b1-parent-verify2.mjs`（直跑本地 electron 二进制 + **生产 userData 路径**）。
+- 读数（**11/11 全过**）：`runtime.json` 生成且字段齐全（pid/host/port/url/version/startedAt）· `GET /healthz` 200 且含 `ok/version/port/workers` · `/healthz.port` 与 `runtime.json` 一致 · MCP `initialize` 成功且下发 `Mcp-Session-Id` · `tools/list` **恰好六件套** · 六件套 description 均中文非空 · `list_workers` 可调用（含 DeepSeek）· 空 `task` ⇒ `E_BAD_ARGS` · 退出（`--quit`）后 `runtime.json` 已删除 · 178xx 无残留监听。
+- 结构：`src/**` 共 34 文件，**最大 295 行**（#27 面全 ≤300）；仍有一处越 300 行线属 #28 面（`src/engine/task-runner.mjs` 315），待其处置。
+- 日志证据：引擎子进程握手成功（`引擎就绪：{ok:true, … adapters:[deepseek]}`），主↔引擎协议连通。
+
+**核验期发现的环境陷阱（已固化，写入测试面口径）**
+- 本会话 `execute` 环境自带 **`ELECTRON_RUN_AS_NODE=1`**；若 `spawn(electron, …)` 继承它，electron 会以**纯 Node 模式**启动 ⇒ `import { Menu } from 'electron'` 报 "does not provide an export named 'Menu'"（**与交付代码无关**，为核验脚手架自身问题，已实测定位并修正）。
+- 口径：**任何起应用的测试/脚手架必须先 `delete env.ELECTRON_RUN_AS_NODE`**；已同步 #29。
+- 另：`POST /mcp` 的同会话请求必须回带响应头的 `Mcp-Session-Id`（首请求必须是 `initialize`）——已同步 #29 写 `verify:mcp` 时注意。
+
+**#28 引擎面 —— 已核验（父侧独立复现 + 交付方读数）**
+- 结构：`src/**` 共 34 文件、**最大 296 行**（#28 面 16 文件全部 ≤300，切分图见其报告）。
+- 交付方读数：真机 `task.run` 通（`delivery={transport:"sse", textPath:"answer.md", files:[engine_probe.py]}`、`toggles.payload.ok=true`、6 个 phase 事件、17–20s）；纯函数：`stream.parse` 对 fixture ⇒ **108 字符逐字一致**；代码块提取与 `probe/out3/artifacts/` **逐字节一致**；开关五级兜底 + 发送前复核实测；`E_SELECTOR_MISSING` 不发送；送件 + `inbox/` 留证；取消 0.95s 内响应；命名净化与上限。
+- **父侧独立复现（关键，推翻了我今早的乐观读数）**：重跑 `probe/probe6-deepseek-download-cdp.mjs` ⇒ 点「下载」后 **浏览器崩溃**（`browserConnected=false`、`pages=0`、下载只落 `.crdownload` 半成品），且 `.browser-profile/Crashpad/reports` 于 **2026-10-09T11:54:40Z（本地 19:54:40）** 新增 `.dmp`——与本机今早（07:3x）同一脚本**成功**的读数相反（环境日间变化，疑为 Edge 自更新）。
+  ⇒ **裁定（取件层①）**：真机「下载按钮」通道在本机 Edge 上**不可靠**（崩溃 + 半成品下载）；**实现须保持「尝试但不阻塞、失败即降级 ②③」**（#28 已如此实现）；**交付契约以层②（代码块提取）与层③（全文落盘）为准**（二者已逐字节/逐字验证）；层①记为**尽力而为**并留待 b4 用随包 Chromium 复测。
+  ⇒ 收口待验：`files/` **不得**出现 `.crdownload` 半成品（引擎侧需跳过未完成下载）——列入收口检查项。
+- 另两条（已裁定待落文档）：`browser.mode`/`channel` 语义取一（mode 定默认 channel，显式 channel 可覆盖；b1 出厂 = 系统 Edge 等价形，b4 随包后去掉显式 channel）；`design §3.3` 文件计划/行数按实际切分回调（收口时机械更新）。
+- 引擎面自评：advisor（code）轮次 1 changes-required → 修复 → 轮次 2 **pass**；**explore 背离审计因资源 429 未能运行**（如实披露，未替代）。
+
+**层①候选规避实验（2026-10-09，失败·负结果）**
+- 假设：崩溃源于 Edge 的下载中心 UI（点下载会开 `edge://downloads-hub/`）⇒ 禁用该特性应可避免。
+- 实验：`probe/probe14-layer1-flag.mjs`（与 probe6 同流程，启动加 `--disable-features=msDownloadsHub,DownloadBubble,DownloadBubbleV2,EdgeDownloadsHub`）+ CDP 自动落盘。
+- 读数：`DOWNLOAD event: deepseek_python_20261009_38bee1.py` ⇒ `t+2s` 仍为 `.crdownload` ⇒ `t+2.7s` **`page closed / context closed`**（同一崩溃形态）⇒ 完整落盘文件数 **0**。
+- 结论：**特征开关规避无效**；层①在本机 Edge 上不可用（非下载中心 UI 单一原因）。裁定不变：层①尽力而为、契约由层②③承载；复测机会留 b4（随包 Chromium）。
+
+**端口顺延上限调整（用户 2026-10-09 决定，轻通道）**
+- 已落地：`+20 → +120`（`src/main/mcp/server.mjs` 常量与 3 处注释、`src/main/index.mjs` 注释、`docs/design/overview.md` §2.3 与 §5 表）；`node --check` 通过、常量读数 = 120。
+- 指南侧（`docs/guide/agent-onboarding.md` 的 +120 对齐 + 「端口被占怎么办」节）由 #29 在其文件域内同步（已发指令）。
+
+**父侧收口验收（2026-10-09，主包AI 亲跑；数据来自我自己的执行，不采信交付方自述）**
+
+| 验收项 | 读数 | 判定 |
+|---|---|---|
+| 单元 `node --test docs/batches/b1-core-loop.units.mjs` | **26 pass / 0 fail**（216ms） | ✅ |
+| `npm run verify:mcp` | 通过 | ✅ |
+| `npm run verify:engine` | 通过 | ✅ |
+| `npm run verify:runtime` | 通过 | ✅ |
+| `npm run verify:loop` | **fail**：`files/ 应至少 1 个文件`（任务本身 done，17.9s） | ⚠️ 见下 |
+| 父侧独立端到端（我自己的驱动 `.thincoder/tmp/parent-e2e.mjs`，真机 MCP 派单） | **done 17.7s**；`transport=sse`；`files/` = **2 个**（`deepseek_python_…py` **source=download** + `parent_e2e.py` 代码块提取）；manifest `state=done` 字段齐全；收工无残留监听、downloads-hub 页被收掉 | ✅ |
+
+- **`verify:loop` 失败与父侧通过并存 → 结论：平台产物形态波动（#29 上抛 2 成立）**：同一提示下 DeepSeek 有时只走「文件/画布」渲染（此时层② 无代码块可提取、层① 又时成时崩 ⇒ `files/` 为空），有时给正文代码块（父侧这跑两路都成了）。**AC-R3-1 的稳定性受平台渲染左右**，属已知波动，非实现缺陷。
+- **层① 口径修正（由父侧实测）**：今晚两种结局都实测到——探针 6/14 崩溃（`.crdownload` + Crashpad `.dmp`）、父侧 e2e 成功（44B `source=download`）⇒ 层① **不稳定而非不可用**；裁定不变（交付契约由层②③承载），复测留 b4（台账 #11）。
+- **产品事实（新增，重要）**：应用的浏览器 profile 在 **`<userData>/profiles/<workerId>/`**（生产 = `%APPDATA%\free-outsource\profiles\w-1\`），**与探针的 `.browser-profile/` 是两个目录** ⇒ 用户首次使用需在**应用自己的浏览器窗口**登录一次（与 R9·F9.4 的"每台新 PC 各平台首次登录一次"一致）；测试侧用隐藏接缝 `FREE_OUTSOURCE_PROFILE_DIR` 复用既有登录态（该接缝与 `FO_USER_DATA` 同属开发/测试口径，需在文档备案）。
+- **父侧 e2e 第一跑（未设该接缝）= 真实首启路径**：任务落 `needs_human / E_LOGIN_REQUIRED`，manifest 带 `error{code,message,hint,needsHuman}`、托盘通知有输出 ⇒ **人工接管路径实测可用** ✓。
+- 收口待办：`files/` 不得含 `.crdownload`（本次两项读数均未出现 ✓）。
+
+**自举验收（2026-10-09，主包AI 真实派单取件）—— 通过 ✅**
+- 宿主侧接入：用户在 ThinCoder「设置 → MCP → 新增服务器」以**类型 `http`** + `http://127.0.0.1:17873/mcp` 接入，探活通过；主包AI 侧工具表出现 `free-outsource_*` 六件套。
+- 真实调用：`list_workers` ⇒ 返回外包工（DeepSeek / ready）；`dispatch_task` ⇒ 命中 DeepSeek（严格优先级选人）。
+- 一次成功单：`20261009-202408-3384` ⇒ **done 14.4s**；`delivery.transport=sse`；**files 两个**（`hello_outsource.py` 62B = 代码块提取 + `deepseek_python_20261009_d4ad90.py` 61B = 下载层）；答复文本与文件内容核对一致（`# file: hello_outsource.py` / `print("hello from free-outsource")`）。
+- 交付目录：`D:\免费外包\outbox\20261009-202408-3384\`（`manifest.json` / `answer.md` / `files/` / `inbox/` / `screenshots/`）——**outbox 结构按设计落地**。
+- 结论：**R1（MCP 接入与派单）/ R3（答复与取件）/ R5（任务状态与交付目录）端到端成立**。
+
+**验收期发现的两处问题**
+1. **🔴 人工处理后清除冷却缺实现（实现与设计不符）**：设计 `scheduler.md` §6 = 冷却「默认 10 分钟，**或人工处理后清除**」；实现唯一清冷却点为「任务成功」（`execution.mjs:177`），**无人工路径** ⇒ 用户按①指南登录后重派被 `E_NO_WORKER（跳过：…E_LOGIN_REQUIRED）` 挡住（父侧实测读数：`20261009-202128-974b` 落 needs_human ⇒ 用户登录成功 ⇒ 重派被拒）。**已派修复轮（eng-coder #33）**：托盘菜单增「我已处理（清除外包工冷却）」⇒ 清除全部冷却 + 反馈；**不新增 MCP 工具**（六件套契约封闭）。
+2. **🟡 保活空白页的 UX 毛刺（非缺陷）**：`src/engine/browser.mjs:105-115` 故意留一个 `about:blank` 保活页——平台上点「下载」时 Edge 会关掉来源标签页，若那是最后一个标签则浏览器进程退出、下载中断（只剩 `.crdownload`）。用户可感知为"多了一个空白页"。**待办**：① 指南加一句说明「窗口里的空白页是本工具保活页，请勿关闭」；长期可改为复用会话页作保活（不新开空白页）。
+
+**已同步的文档修正（本次验收触发）**：`docs/guide/agent-onboarding.md` §一 第 3 步补界面级步骤 —— **类型选 `http`**（界面这一格就叫 `http`，非 URL/SSE/stdio）、地址、Test、保存；并补**形态 A（`.mcp.json`）实测注意**：宿主在启动/装配时读取该文件，**运行期间写入则当前会话不出现该条目**（本次实测如此——用户手动新增才接上）。
+
+### b1 收口（2026-10-09）
+
+**收口检查（D7 结算同步）**
+- **交付三单 + 一轮修复全部落地并父侧核验**：主进程面（#27）· 引擎面（#28）· 验收面与文档（#29）· 修复轮（#33：人工处理后清除冷却）。
+- **结构**：`src/**` 共 34 文件、**最大 296 行**（无 >300）。
+- **五条验收命令（父侧亲跑）**：单元 **27/27** · `verify:mcp` ✓ · `verify:engine` ✓ · `verify:runtime` ✓ · `verify:loop` ⚠️ 一次失败（`files/` 空 = 平台把产物渲染为文件/画布所致，**非缺陷**；同提示下父侧独立端到端通过）。
+- **自举验收**：通过 —— 宿主接入（类型 `http`）⇒ 主包AI 工具表见六件套 ⇒ 真实派单 `20261009-202408-3384` **done 14.4s** + 取件两个文件（代码块提取 + 下载层）。
+- **台账**：R1 / R2 / R3 / R7 / R8 / R9 **已核销**（证据在各台账行）；R4 / R5（设置界面）与 R6（打包）→ **待设计**（随 b2 / b4）。
+- **技术待办保留**：11（b4 复测取件层①）· 12（b3 增强画布/文件形态取件）· 13（b4 打包草案落地，修两处）· 14（Electron ESM 顶层 `await` 坑的记录落点）。
+- **暂缓批复核**：无（本批无暂缓条目）。
+- **未收口项**：无（b2 / b4 属后续批次，各自立档）。
+
+**收口轮修复与同步（均由本轮验收触发，已落地）**
+1. **人工处理后清除冷却**（设计缺口修复，eng-coder #33）：托盘菜单「我已处理（清除外包工冷却）」；设计档 `scheduler.md` §6 补**载体与粒度**、`overview.md` §5 人工接管入口补该动作；**四处用户可见文案同步**（引擎 `task-runner.mjs` 两条错误消息 · `mcp/errors.mjs` 三条 hint · ① 指南三处 · ④ 简报三处）；归档单测 **+1 例（26→27）**。
+2. **① 指南**：接入步骤补界面级操作（**类型选 `http`**）+ 形态 A（`.mcp.json`）实测注意（运行期写入不生效）。
+3. **层① 口径修正**：由「不可用」改判为「**不稳定**」（今晚崩/成两态皆有实测），契约由层②③承载。
+4. **收口待验项已验**：`files/` 无 `.crdownload` 半成品 ✓（两组读数）。
+
+**冻结**：本记录自「已收口」状态行起冻结，此后不再回改；后续工作另立批次。
