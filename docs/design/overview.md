@@ -173,7 +173,7 @@
 {
   "version": 1,
   "mcp": { "port": 17873, "host": "127.0.0.1", "token": "" },
-  "browser": { "mode": "chromium", "channel": "msedge", "headless": false },
+   "browser": { "mode": "chromium", "channel": "", "headless": false },
   "outboxDir": "D:\\免费外包\\outbox",
   "workers": [
     { "id": "w-1", "platform": "deepseek", "name": "DeepSeek", "enabled": true,

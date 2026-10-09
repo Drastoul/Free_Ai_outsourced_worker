@@ -51,7 +51,7 @@
 }
 ```
 
-- `delivery.transport ∈ sse | dom`（主通道 / 兜底通道，见 `docs/design/modules/adapters.md`）。
+- `delivery.transport ∈ sse | dom`（主通道 / 兜底通道，见 `docs/design/modules/adapters.md`）——**取值名沿用**：`sse` = 「主通道（流捕获）」，**涵盖非 SSE 的流式协议**（如 JSON 行流），`dom` = DOM 兜底通道；更名 / 扩枚举属协议面变更，另批议。
 - `toggles`（R8）：开关应用与核对——`configured` = 外包工配置值；`payload` = 捕获到的 `chat/completion` 请求载荷两键（任务未发送或未捕获 ⇒ `null`）；`ok` = `payload` 与 `configured` 一致。规则见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」。
 - 非终态 manifest（应用重启后扫描到）⇒ 主进程写入独立标记字段 `interrupted`（`{ at, previousState }`，不进 `state` 枚举；缺省不出现）；不自动重跑，产物与 manifest 原样保留供人工取用。
 

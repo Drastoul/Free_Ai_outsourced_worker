@@ -232,6 +232,7 @@
 - AC-R8-1（命令可验）：配置 `toggles.thinking=true, toggles.search=false` 派单一次 → 捕获的 `chat/completion` 请求载荷满足 `thinking_enabled=true` 且 `search_enabled=false`。
 - AC-R8-2（操作可证伪）：把某外包工开关改为另一组值 → 再派一单 → 载荷两键随之变化；界面与日志可见应用动作。
 - AC-R8-3（命令可验）：开关元素缺失场景（选择器失效）→ 任务走 `E_SELECTOR_MISSING` 处置路径，不发送。
+- **无开关能力的平台**（适配器 `capabilities.toggles = false`）⇒ **跳过开关子步**（配置值保留、不报错）；该平台的 AC-R8-1 / AC-R8-2 / AC-R8-3 不适用（口径同 `docs/design/modules/adapters.md`「外包工开关的应用与核对」末行）。
 
 **依赖**：R3 的适配器与发送链路；平台开关能力（DeepSeek 已实测：`div.ds-toggle-button` + `aria` 可读可设、请求载荷 `thinking_enabled` / `search_enabled` 为权威读法）；b2 界面（开关的呈现位置）。
 
