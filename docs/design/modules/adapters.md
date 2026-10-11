@@ -23,13 +23,13 @@ export default {
   },
   selectors: { /* 页面元素台账，见 §3.1 */ },
   checkLogin(page),               // → 'ready' | 'login_required' | 'captcha'
-  openSession(page),              // 新会话（每单独立，避免上下文污染）
+  openSession(page),              // 新建聊天会话（何时新建由 docs/design/modules/browser-engine.md §9 判定；复用命中 ⇒ 不调用）
   applyToggles(page, toggles),    // 开关对齐（R8）：失败 ⇒ E_SELECTOR_MISSING、不发送（见 §3.8）
   requestPayload: { toggles(payload) },  // 纯函数（可单测）：从 chat/completion 请求载荷读出 { thinking_enabled, search_enabled }；未捕获 / 键缺失 ⇒ null（R8 核对，见 §3.8）
   uploadFiles(page, files),       // 附件上传
   send(page, text),               // 发送任务文本
   stream: { match(url), parse(body) },   // 答复流：命中判定 + 纯函数解析（可单测）
-  dom: { collect(page) },                // 兜底：最后助手回合的全部 markdown 块
+  dom: { collect(page) },                // 兜底：本单回合的全部 markdown 块（b5 起锚定本单，见 §3.4）
   extract: { filesFromText(text) },      // 代码块 → 文件清单（纯函数，可单测）
 };
 ```
@@ -51,7 +51,7 @@ export default {
 
 ### 3.2 执行流水
 
-1. 新会话（`capabilities.newChat`）——每单一条独立会话。
+1. 会话准备（`capabilities.newChat`）：按会话复用判定（`docs/design/modules/browser-engine.md` §9）——复用命中 ⇒ 沿用当前会话（不调 `openSession`）；未复用 ⇒ 调 `openSession` 新建。
 2. 应用外包工开关（`capabilities.toggles`；细见 §3.8）：把 `toggles.thinking` / `toggles.search` 对齐到页面开关；失败 ⇒ `E_SELECTOR_MISSING`，不进入发送。
 3. 有附件 ⇒ `setInputFiles`，等界面出现文件名（送件，决策 H）。
 4. 发送：聚焦输入框 + `insertText` + `Enter`（先校验文本已落入输入框，未落则逐字 `type` 兜底）。
@@ -76,6 +76,7 @@ export default {
 - DOM 文本会夹带界面按钮文字（复制 / 下载，见 `probe/out3/run.log` 的 DOM answer）⇒ 只作兜底；`delivery.transport = "dom"` 时在回执与 manifest 中明示。
 - 触发条件：网络流未捕获（平台改版 / 拦截失败）且 DOM 文本连续稳定（探针窗口：2s × 3 次稳定）。
 - 兜底时同样要等到「结束」——以文本稳定替代流内结束标记。
+- **本单回合锚定（b5 起，所有适配器通用）**：会话复用（`modules/browser-engine.md` §9）下页面留存上一单回合 ⇒「页面最后一个稳定文本」不再是完成判据；`send()` 记录**发送前助手回合基线**（回合计数 / 末回合标识，存储形式自由），`dom.collect()` 只接受**基线之后出现的新回合**；无新回合 ⇒ 返回空串（引擎按 `E_NO_RESPONSE` 处置——不静默交付旧答复）。判据 = `npm run verify:engine`「复用 × DOM 兜底」例（交付文本 = 本单回合、不含上一单文本）。
 
 ### 3.5 取件三层与送件
 
@@ -141,6 +142,7 @@ export default {
 | 正文块 / 思考区 | 正文 = `div.paragraph` + `div.syntax-highlighter.segment-code-content`（嵌套 `pre.language-python` 须**去重**）；**思考区文本同为 `div.paragraph`** ⇒ 须排除 `[class*="toolcall-content"]` / `thinking-container` 并**按 DOM 序**采集；**不可按 `toolcall` 粗排除**（答案区同在 `toolcall-rollup` 下） | `probe/out18`（K9；`naive` 口径混入思考文本已验证） |
 
 - **空会话判据补充**：会话区容器不存在 ⇒ 按空会话判（首页空态）。
+- **复用下的本单锚定（b5）**：同 §3.4——`send` 时记基线、`collect` 只取基线后的新回合（回合容器 = `div.chat-content-item.chat-content-item-assistant`；实现落 `src/engine/adapters/kimi-dom.mjs`）。
 
 ### 5.2 收答复主通道（分帧 JSON 行流，非 SSE）
 

@@ -113,7 +113,7 @@
 
 1. 主包AI 调用 `dispatch_task` → MCP 服务面校验入参并交给调度器。
 2. 调度器选人（指定或优先级，见 `modules/scheduler.md`；不可选 ⇒ 同步拒绝、不建任务，见 `modules/mcp-server.md` §3.2）→ 建任务并写 outbox 初始 manifest（含 `worker` / `selection`）→ 经引擎客户端下发 `task.run`（忙碌时排队等待）。
-3. 引擎按外包工取浏览器上下文（复用已有则开新会话）→ 检查登录态（不合格 ⇒ 报 `E_LOGIN_REQUIRED`）。
+3. 引擎按外包工取浏览器上下文 → 打开页面并按会话复用判定（复用命中 ⇒ 沿用当前会话；未复用 ⇒ 新会话，见 `modules/browser-engine.md` §9）→ 检查登录态（不合格 ⇒ 报 `E_LOGIN_REQUIRED`）。
 4. 应用该外包工开关（`toggles`；失败 ⇒ `E_SELECTOR_MISSING`，不发送）→ 有附件则上传（`setInputFiles`）→ 发送任务文本（聚焦 + insertText + Enter）。
 5. 收答复：主通道拦截平台流式响应体解析全文，以流内结束标记判定完成；DOM 抓取为兜底（协议见 `modules/adapters.md`）。
 6. 取件三层：下载捕获（CDP 自动落盘）/ 回复内代码块提取 / 回复全文落盘（规则见 `modules/outbox.md`）。
@@ -186,7 +186,8 @@
       "streamFirstByteMs": 120000, "taskTimeoutMs": 300000, "extractingMs": 60000
     }
   },
-  "scheduler": { "globalConcurrency": 2, "perWorkerConcurrency": 1, "retryPerWorker": 2, "maxFailoverWorkers": 3 }
+  "scheduler": { "globalConcurrency": 2, "perWorkerConcurrency": 1, "retryPerWorker": 2, "maxFailoverWorkers": 3 },
+  "session": { "reuse": true, "ttlMs": 600000, "maxTasksPerSession": 5 }
 }
 ```
 
@@ -194,6 +195,7 @@
 - `workers[].toggles`：外包工级开关（`thinking` / `search`，默认 `false`）——派单时应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」；界面呈现随 b2（`modules/settings-app.md`）。
 - `mcp.port` / `mcp.host`：`port` = **期望端口**（重启生效；写入通道 = 文件手改、工具面无配置读写工具，实际监听端口与发布口径均见本文 §2.3）；`host` 固定 `127.0.0.1`（不提供跳网访问——R9 边界；非该值按非法配置处理：回退默认并记日志）。
 - `outboxDir`：交付目录——**实际路径**按交付策略解析（配置值不可用 ⇒ 回落），解析时点与落点唯一性见 `docs/design/modules/outbox.md`；界面显示实际路径（b2）。
+- `session`：会话复用策略（`reuse` 默认 `true`；`ttlMs` 空闲 TTL 默认 600000ms；`maxTasksPerSession` 默认 5）——机制权威见 `modules/browser-engine.md` §9；主进程透传口径同 `toggles`（`modules/scheduler.md` §10）。
 
 ## 5. 错误与人工接管（设计点⑨）
 
@@ -293,7 +295,7 @@
 |---|---|---|
 | 单元 | 随批归档 `docs/batches/b1-core-loop.units.mjs`（`node --test` 直跑） | 纯逻辑：SSE 解析器、代码块提取、命名净化、选人算法、状态机 |
 | 集成 | `npm run verify:mcp` | 契约面：initialize、tools/list 六件套、入参 schema、错误码路径、/healthz；文档断言（① `docs/guide/agent-onboarding.md`：四节 + R9 两节 +「本工具端点配置」节；④ `docs/guide/agent-brief.md`：五要素自述；内嵌 JSON 片段可解析 + 字段形状断言（`mcpServers` 对象形 + `url` 字段 / `config.json` 的 `mcp.servers` 数组形样例）；工具清单与 `tools/list` 对照） |
-| 集成 | `npm run verify:engine` | 浏览器引擎 + 下载捕获（CDP 自动落盘，本地 blob 页）+ 开关应用失败场景（本地 fixture 页；AC-R8-3）——不依赖平台登录 |
+| 集成 | `npm run verify:engine` | 浏览器引擎 + 下载捕获（CDP 自动落盘，本地 blob 页）+ 开关应用失败场景（本地 fixture 页；AC-R8-3）+ 会话复用场景（连续两单复用 / TTL 到期换新 / 出错即换新 / 上限换新 / 禁用回退 / 取消即换新 / 复用 × DOM 兜底；见 `modules/browser-engine.md` §9）——不依赖平台登录 |
 | 集成 | `npm run verify:loop` | 真机端到端：派单 → 取答复 → 取件 → outbox 判据（含开关载荷核对 `manifest.toggles`；AC-R8-1；需登录态） |
 | 集成 | `npm run verify:loop:kimi` | 真机端到端（**第二平台 Kimi**；同一命令以 `FO_LOOP_PLATFORM=kimi` 参数化）：派单 → 取答复 → 取件 → outbox 判据；**按适配器 `capabilities` 条件断言**（下载捕获 / 开关能力位不具备 ⇒ 相应子步跳过）；AC-R3-1 / AC-R3-2 的 Kimi 侧（**AC-R3-4 的 Kimi 侧 = K5 探针读数 + 人工附件派单场景，不由本命令覆盖**） |
 | 集成 | `npm run verify:runtime` | 端点与端口：占用顺延 / 期望端口固定 / `runtime.json` 与探活（AC-R9-1；AC-R9-2 b1 侧；自控应用启停） |

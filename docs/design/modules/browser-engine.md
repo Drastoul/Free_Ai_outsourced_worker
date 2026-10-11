@@ -60,4 +60,32 @@ chromium.launchPersistentContext(profileDir, {
 ## 8. 验收判据
 
 - `npm run verify:engine`（集成）：按配置启动上下文 → 打开本地 blob 页面触发下载 → 断言「下载事件触发 + CDP 自动落盘至暂存区 + 归属移入 files/ + 命名净化」；断言同一 profileDir 可连续两次 launch（复用成功）。
+- 会话复用（b5）：`npm run verify:engine` 增含会话复用场景（连续两单复用 / TTL 到期换新 / 出错即换新 / 上限换新 / 禁用回退 / 取消即换新 / 复用 × DOM 兜底；本地 fixture + `openSession` 计数）——判据与读数口径见 `docs/batches/b5-session-reuse.md` §2；机制见 §9。
 - 对应需求验收：AC-R3-3（开关应用失败场景见 `docs/design/modules/adapters.md`「验收判据」，AC-R8-3）。
+
+## 9. 会话复用策略（b5）
+
+同一外包工**连续任务复用同一聊天会话**（减少平台风控触发、相邻任务上下文连续）；会话单元为**引擎内存态、按 `workerId` 隔离、不落盘**（实现 `src/engine/session-policy.mjs`）。本节 = 机制权威；落地接线与验收见 `docs/batches/b5-session-reuse.md` §2。
+
+- **会话单元**：`{ pageRef, sessionStartedAt, taskCount, lastTaskEndedAt, lastOutcome }`（`pageRef` 仅作页面身份比对，不调 Playwright API）。**不变量：单元实例锚定引擎进程生命周期**——单实例装配于 `createEngine`（`src/engine/host.mjs:40`）、由引擎级 `TaskRunner`（`:49` 构造一次）持有、跨 `task.run` 复用（不随单重建）；引擎重启 ⇒ 实例消失 ⇒ 首单 `absent`。
+- **判断时点**：opening 阶段、`openSession` 之前（`src/engine/task-runner.mjs` opening 内）——`ensureOnPlatform` + `waitForLoginState` 之后；**登录检查每单照做**（§5）。
+- **判定顺序（首个命中为准）**：
+
+  | 序 | 条件 | 动作 | reason |
+  |---|---|---|---|
+  | 1 | `session.reuse === false` | 新会话 | `disabled` |
+  | 2 | 无会话单元 | 新会话 | `absent` |
+  | 3 | `pageRef` 与当前页不一致（上下文重启过） | 新会话 | `replaced` |
+  | 4 | `lastOutcome === 'error'` | 新会话 | `error` |
+  | 5 | `lastOutcome === 'canceled'` | 新会话（保守） | `canceled` |
+  | 6 | `now > lastTaskEndedAt + ttlMs` | 新会话 | `ttl` |
+  | 7 | `taskCount >= maxTasksPerSession` | 新会话 | `count` |
+  | 8 | 其余 | 复用（跳过 `openSession`） | `reuse` |
+
+- **写回**：每次引擎 run 的 `finally` 按 result 派生 `done` / `error` / `canceled` 落单元（`done` 才 `taskCount++`；均更新 `lastTaskEndedAt`）；仅 `newChat !== false` 的适配器记账。重试 = 新的引擎 run ⇒ 上一 run 已落 `error` ⇒ **重试天然新会话**（与 `scheduler.md` §3 一致）。
+- **写回·result 派生判别**：`result.canceled === true` ⇒ `canceled`；否则 `result.error` 非空 ⇒ `error`；否则 `done`（取数点：`src/engine/task-runner.mjs:95` 初始化 / `:223-225`、`:236-237` 置位；主进程同口径 = `src/main/scheduler/policy.mjs:92-93`）。
+- **作废 / 换新场景**：登录失效 / 风控 ⇒ 本单 error ⇒ 下一单新会话；浏览器上下文关闭 ⇒ `pageRef` 比对 ⇒ `replaced`；引擎重启 ⇒ 内存态消失 ⇒ 首单 `absent`；降级换人 ⇒ 每 `workerId` 单元独立；人工「我已处理」不触及会话单元（靠「出错即换新」覆盖）。
+- **与 DOM 兜底的关系**：复用 ⇒ 页面留存上一单回合，DOM 兜底不得以「页面最后一个稳定文本」作完成判据——须锚定**本单回合**（约束与判据 = `docs/design/modules/adapters.md` §3.4）。
+- **配置**：`session.reuse` / `session.ttlMs` / `session.maxTasksPerSession`（总键面见 `docs/design/overview.md` §4）。取用口径同 `toggles`：**主进程经 `task.run` 透传，引擎不自行读配置**（`docs/design/modules/scheduler.md` §10）；直接驱动引擎时缺省回落同一套设计默认值。
+- **日志**：复用 ⇒ `复用会话（taskCount=… idleMs=…）`；新建 ⇒ `新会话（原因=…）`（引擎 task 日志，随 stderr 进 `<userData>/logs/app.log`）。
+- **不承诺**（边界见批次档 §2）：不复用跨引擎重启 / 不跨外包工共享 / 不做上下文压缩 / 不做会话预热。

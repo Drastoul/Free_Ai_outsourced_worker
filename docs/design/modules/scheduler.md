@@ -14,7 +14,7 @@
 |---|---|
 | `taskId` | `YYYYMMDD-HHmmss-<4位随机>`（本地时间，人可读） |
 | `state` | `queued / running / done / failed / canceled / needs_human` |
-| `phase` | running 内部阶段：`opening → uploading → sending → streaming → extracting → finalizing`（opening 内部：打开页面 → 新会话 → 应用外包工开关） |
+| `phase` | running 内部阶段：`opening → uploading → sending → streaming → extracting → finalizing`（opening 内部：打开页面 → 会话复用判断（未复用则新会话）→ 应用外包工开关；复用策略见 `modules/browser-engine.md` §9） |
 | `worker` | `{id, name, platform}`（实际执行者；与指定 / 选人结果一致） |
 | `selection` | `{mode: "priority" | "explicit", reason}`（为何选到它；降级时记录轨迹） |
 | `attempts` | 每次尝试 `{worker, result, at}`（失败原因、降级过程） |
@@ -88,7 +88,7 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 
 | 阶段 | 配置键与默认值 | 超时错误码 |
 |---|---|---|
-| opening（打开页面 / 新会话 / 应用外包工开关） | `limits.timeouts.openingMs`（60s） | `E_TIMEOUT` |
+| opening（打开页面 / 会话复用判断（未复用则新会话） / 应用外包工开关） | `limits.timeouts.openingMs`（60s） | `E_TIMEOUT` |
 | uploading（上传附件） | `limits.timeouts.uploadingMs`（60s） | `E_TIMEOUT` |
 | sending（发送确认） | `limits.timeouts.sendingMs`（30s） | `E_SEND_FAILED` |
 | streaming（首字节） | `limits.timeouts.streamFirstByteMs`（120s） | `E_NO_RESPONSE` |
@@ -108,7 +108,7 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 
 ## 10. 与引擎子进程的接口（摘要）
 
-- 逐行 JSON-RPC（stdio）：`engine.health`、`task.run({taskId, worker, prompt, files, outboxDir, toggles})`、`task.cancel({taskId})`；**`worker` = 对象 `{id, name, platform}`**（与 manifest / TaskView 同形：`id` 定位 `<userData>/profiles/<workerId>/`、`platform` 选适配器）；`toggles` = 该外包工配置值（`{thinking, search}`，**主进程传入**——引擎不自行读配置，保持单一事实源；应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
+- 逐行 JSON-RPC（stdio）：`engine.health`、`task.run({taskId, worker, prompt, files, outboxDir, toggles})`、`task.cancel({taskId})`；**`worker` = 对象 `{id, name, platform}`**（与 manifest / TaskView 同形：`id` 定位 `<userData>/profiles/<workerId>/`、`platform` 选适配器）；`toggles` = 该外包工配置值（`{thinking, search}`，**主进程传入**——引擎不自行读配置，保持单一事实源；应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）；`session` = 会话复用策略值（`{reuse, ttlMs, maxTasksPerSession}`，同样**主进程传入**——缺省时引擎用同一套设计默认值；机制见 `modules/browser-engine.md` §9）。
 - 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok}`（形状见 `docs/design/overview.md` §3.2 第 7 步）；**失败 = result 内 `error: {code, message, hint?} | null`**（与 manifest 的 `error` 同形；**JSON-RPC error 仅用于协议级 / 内部异常**，不承载业务失败）；失败时 `delivery` / `toggles` 可缺席（缺席 ⇒ 视为未产出，不得为凑字段造值）。
 - 进度事件：`{event: "task-progress", taskId, phase}`（供 `get_task` 展示）。
 - 引擎崩溃：主进程重启引擎并置进行中任务 `E_ENGINE_DOWN`（可重派）。
@@ -120,4 +120,5 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 
 - 单元（随批归档）：选人算法（优先级 / 硬绑定 / 忙排队 / 降级轨迹）、状态机转换、重试计数与退避、`E_SELECTOR_MISSING`（含开关应用失败）在 b1 单外包工配置下的降级与终态。
 - 集成：`npm run verify:loop`（真机全链）。
+- 集成（b5）：`npm run verify:engine` 含会话复用场景（连续两单复用 / TTL 到期换新 / 出错即换新 / 上限换新 / 禁用回退 / 取消即换新 / 复用 × DOM 兜底；见 `modules/browser-engine.md` §9）。
 - 对应需求验收：AC-R4a-1..3、AC-R4b-1..3、AC-R3-5、AC-R8-3（处置路径）。
