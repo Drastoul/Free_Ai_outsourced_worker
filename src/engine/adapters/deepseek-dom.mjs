@@ -1,28 +1,45 @@
 /**
  * DeepSeek 的 DOM 侧取件辅助（`docs/design/modules/adapters.md` §3.4 DOM 兜底、§3.5 取件层① 触发）：
- *   · `collectDomAnswer`：兜底通道——拼接最后一个助手回合内的全部 markdown 块（探针 2 只取最后一块会漏内容）；
+ *   · `markAssistantBaseline`：`send()` 前记「助手回合基线」（b5 本单锚定——复用会话时页面留存上一单回合）；
+ *   · `collectDomAnswer`：兜底通道——只拼接**基线之后新回合**内的全部 markdown 块（探针 2 只取最后一块会漏内容）；
  *   · `clickDownloadButtons`：取件层① 的触发——点最后一个助手回合里代码块的「下载」按钮（落盘由 CDP 自动落盘承担）。
- * 两者都不抛错（DOM 只是兜底、下载只是三层之一）。
+ * 三者都不抛错（DOM 只是兜底、下载只是三层之一）。
  */
 const DOM_TAG = 'data-fo';
+const BASELINE_ATTR = 'data-fo-dom-baseline';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** DOM 兜底：拼接最后一个助手回合内的全部 markdown 块 */
+/** 发送前记「助手回合基线」：给当前全部 markdown 块及其回合容器打标（b5 起 `collect` 只认未打标的新回合） */
+export async function markAssistantBaseline(page) {
+  return await page
+    .evaluate((attr) => {
+      const blocks = [...document.querySelectorAll('[class*="ds-markdown"]')];
+      for (const b of blocks) {
+        b.setAttribute(attr, '1');
+        const scope = b.closest('[class*="message"]') || b.parentElement?.parentElement?.parentElement;
+        scope?.setAttribute(attr, '1');
+      }
+      return blocks.length;
+    }, BASELINE_ATTR)
+    .catch(() => 0);
+}
+
+/** DOM 兜底：拼接基线之后新回合内的全部 markdown 块（无新回合 ⇒ 空串；上层据此判 `E_NO_RESPONSE`，不静默交付旧答复） */
 export async function collectDomAnswer(page) {
   return await page
-    .evaluate(() => {
-      const blocks = [...document.querySelectorAll('[class*="ds-markdown"]')];
-      if (!blocks.length) return '';
-      const lastBlock = blocks[blocks.length - 1];
+    .evaluate((attr) => {
+      const fresh = [...document.querySelectorAll('[class*="ds-markdown"]')].filter((b) => !b.closest(`[${attr}]`));
+      if (!fresh.length) return '';
+      const lastBlock = fresh[fresh.length - 1];
       const scope =
         lastBlock.closest('[class*="message"]') || lastBlock.parentElement?.parentElement?.parentElement || document.body;
-      const inScope = blocks.filter((b) => scope.contains(b));
-      const picked = inScope.length ? inScope : blocks.slice(-1);
+      const inScope = fresh.filter((b) => scope.contains(b));
+      const picked = inScope.length ? inScope : fresh.slice(-1);
       return picked
         .map((b) => (b.innerText || '').trim())
         .filter(Boolean)
         .join('\n\n');
-    })
+    }, BASELINE_ATTR)
     .catch(() => '');
 }
 

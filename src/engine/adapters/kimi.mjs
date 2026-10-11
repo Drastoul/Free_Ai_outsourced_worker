@@ -6,7 +6,7 @@
 import { defineAdapter } from './base.mjs';
 import { matchStreamUrl, parseChatStream } from './kimi-stream.mjs';
 import { SELECTORS, checkLoginState, openNewSession, sendText, uploadFilesViaInput } from './kimi-page.mjs';
-import { collectDomAnswer } from './kimi-dom.mjs';
+import { collectDomAnswer, markAssistantBaseline } from './kimi-dom.mjs';
 import { filesFromText } from './text-files.mjs';
 
 export default defineAdapter({
@@ -42,7 +42,7 @@ export default defineAdapter({
     return await checkLoginState(page);
   },
 
-  /** 新会话（K4）：每单一条独立会话；判据 = 会话区清空，兜底导航首页 */
+  /** 新会话（K4）：判据 = 会话区清空，兜底导航首页；何时新建由引擎按会话复用判定（复用命中 ⇒ 不调用本函数） */
   async openSession(page, ctx = {}) {
     return await openNewSession(page, this.url, ctx);
   },
@@ -52,8 +52,9 @@ export default defineAdapter({
     return await uploadFilesViaInput(page, files, ctx);
   },
 
-  /** 发送（K3 / D2）：清空 + `insertText` + 落地校验 → 点 `div.send-button-container`；点击失败 ⇒ Enter 兜底 */
+  /** 发送（K3 / D2）：先记「助手回合基线」（b5 本单锚定）→ 清空 + `insertText` + 落地校验 → 点 `div.send-button-container`；点击失败 ⇒ Enter 兜底 */
   async send(page, text, ctx = {}) {
+    await markAssistantBaseline(page);
     return await sendText(page, text, ctx);
   },
 
@@ -63,7 +64,7 @@ export default defineAdapter({
     parse: parseChatStream,
   },
 
-  /** DOM 兜底（K9）：最后一个助手回合的正文块（排除思考区，按 DOM 序） */
+  /** DOM 兜底（K9；b5 起本单锚定）：基线之后最后一个新助手回合的正文块（排除思考区，按 DOM 序；无新回合 ⇒ 空串） */
   dom: {
     async collect(page) {
       return await collectDomAnswer(page);

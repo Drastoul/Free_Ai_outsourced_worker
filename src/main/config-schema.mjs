@@ -35,6 +35,7 @@ export const DEFAULT_CONFIG = {
     },
   },
   scheduler: { globalConcurrency: 2, perWorkerConcurrency: 1, retryPerWorker: 2, maxFailoverWorkers: 3 },
+  session: { reuse: true, ttlMs: 600000, maxTasksPerSession: 5 },
 };
 
 function isPlainObject(v) {
@@ -199,6 +200,15 @@ export function normalizeConfig(raw) {
     perWorkerConcurrency: pickNumber(schedSrc.perWorkerConcurrency, d.scheduler.perWorkerConcurrency, { min: 1, max: 16 }, issues, 'scheduler.perWorkerConcurrency'),
     retryPerWorker: pickNumber(schedSrc.retryPerWorker, d.scheduler.retryPerWorker, { min: 0, max: 10 }, issues, 'scheduler.retryPerWorker'),
     maxFailoverWorkers: pickNumber(schedSrc.maxFailoverWorkers, d.scheduler.maxFailoverWorkers, { min: 1, max: 16 }, issues, 'scheduler.maxFailoverWorkers'),
+  };
+
+  // session（会话复用策略；机制权威 = docs/design/modules/browser-engine.md §9）
+  const sessionSrc = isPlainObject(src.session) ? src.session : {};
+  if (src.session !== undefined && !isPlainObject(src.session)) issues.push('session 不是对象，回退默认值');
+  config.session = {
+    reuse: pickBoolean(sessionSrc.reuse, d.session.reuse, issues, 'session.reuse'),
+    ttlMs: pickNumber(sessionSrc.ttlMs, d.session.ttlMs, { min: 1, max: MAX_INT }, issues, 'session.ttlMs'),
+    maxTasksPerSession: pickNumber(sessionSrc.maxTasksPerSession, d.session.maxTasksPerSession, { min: 1, max: 1000 }, issues, 'session.maxTasksPerSession'),
   };
 
   return { config, issues };

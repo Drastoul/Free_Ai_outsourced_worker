@@ -26,6 +26,7 @@ import {
 } from './artifacts.mjs';
 import { ensureOnPlatform, waitForLoginState } from './opening.mjs';
 import { buildErrorReport } from './failure.mjs';
+import { SessionPolicy } from './session-policy.mjs';
 import { remainingMs, withDeadline } from './util.mjs';
 
 /** 阶段超时默认值（`docs/design/modules/scheduler.md` §7「阶段超时表」，毫秒；可由调用方按配置覆盖） */
@@ -39,12 +40,13 @@ export const DEFAULT_TIMEOUTS = Object.freeze({
 });
 
 export class TaskRunner {
-  constructor({ browser, log = () => {}, emit = () => {} } = {}) {
+  constructor({ browser, log = () => {}, emit = () => {}, sessionPolicy } = {}) {
     this.browser = browser;
     this.log = log;
     this.emit = emit;
     this.tasks = new Map();
     this.workerLocks = new Map();
+    this.sessionPolicy = sessionPolicy ?? new SessionPolicy({ log: (m) => this.log('task', m) });
   }
 
   /** 进行中的任务 id（供 engine.health） */
@@ -137,7 +139,7 @@ export class TaskRunner {
       adapter = getAdapter(worker.platform);
       if (!adapter) throw new EngineError('E_WORKER_UNAVAILABLE', `平台适配器未注册：${worker.platform}`);
 
-      // ── opening：打开页面 → 登录检查 → 新会话 → 应用外包工开关（整体受 openingMs 预算约束）──
+      // ── opening：打开页面 → 登录检查 → 会话复用判定（未复用则新会话）→ 应用外包工开关（整体受 openingMs 预算约束）──
       this.#progress(taskId, 'opening');
       const openingDeadline = Date.now() + timeouts.openingMs;
       try {
@@ -155,7 +157,12 @@ export class TaskRunner {
               throw new EngineError('E_LOGIN_REQUIRED', `登录态不可用（${loginState}）：请在打开的浏览器窗口完成登录，然后点托盘「我已处理（清除外包工冷却）」再重派`);
             }
             if (adapter.capabilities.newChat !== false) {
-              await adapter.openSession(page, { log: (m) => this.log('task', m) });
+              const decision = this.sessionPolicy.decide({ workerId: worker.id, now: Date.now(), config: params.session, page });
+              if (decision.reuse) this.log('task', `复用会话（taskCount=${decision.taskCount} idleMs=${decision.idleMs ?? 'n/a'}）`);
+              else {
+                await adapter.openSession(page, { log: (m) => this.log('task', m) });
+                this.sessionPolicy.markNewSession(worker.id, { reason: decision.reason, page, at: Date.now() });
+              }
             }
             if (adapter.capabilities.toggles) {
               await applyTogglesWithLog({ page, adapter, toggles, stage: '应用', log: this.log });
@@ -264,6 +271,9 @@ export class TaskRunner {
         if (page && capture) detachStreamCapture(page, capture);
       } catch (e) {
         this.log('task', `卸载流监听失败（忽略）：${String(e?.message ?? e).slice(0, 120)}`);
+      }
+      if (adapter && adapter.capabilities.newChat !== false) {
+        this.sessionPolicy.recordOutcome(worker.id, { outcome: result.canceled === true ? 'canceled' : result.error ? 'error' : 'done', at: Date.now() });
       }
       this.tasks.delete(taskId);
       try {

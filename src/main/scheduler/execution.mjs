@@ -153,6 +153,7 @@ export class TaskRunner {
             files: [...t.request.files],
             outboxDir: t.taskDir,
             toggles: { ...(worker.toggles || { thinking: false, search: false }) },
+            session: { ...this.config.current.session },
             // 配置值透传（引擎接口的可选覆盖项；缺省时引擎用同一套设计默认值）
             timeouts: { ...this.config.current.limits.timeouts },
             limits: { maxFileBytes: this.config.current.limits.maxFileBytes },

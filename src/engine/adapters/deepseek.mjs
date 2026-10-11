@@ -20,7 +20,7 @@ import {
   uploadFilesViaInput,
   waitForToggleElement,
 } from './deepseek-page.mjs';
-import { clickDownloadButtons, collectDomAnswer } from './deepseek-dom.mjs';
+import { clickDownloadButtons, collectDomAnswer, markAssistantBaseline } from './deepseek-dom.mjs';
 
 export default defineAdapter({
   id: 'deepseek',
@@ -44,7 +44,7 @@ export default defineAdapter({
     return await checkLoginState(page);
   },
 
-  /** 新会话：每单一条独立会话 */
+  /** 新会话：何时新建由引擎按会话复用判定（复用命中 ⇒ 不调用本函数）；新建判据 = 点「开启新对话」，兜底导航首页 */
   async openSession(page) {
     return await openNewSession(page, this.url);
   },
@@ -102,8 +102,9 @@ export default defineAdapter({
     return await uploadFilesViaInput(page, files, ctx);
   },
 
-  /** 发送：聚焦输入框 → insertText →（落地失败兜底逐字 type）→ Enter */
+  /** 发送：先记「助手回合基线」（b5 本单锚定）→ 聚焦输入框 → insertText →（落地失败兜底逐字 type）→ Enter */
   async send(page, text, ctx = {}) {
+    await markAssistantBaseline(page);
     return await sendText(page, text, ctx);
   },
 
@@ -113,7 +114,7 @@ export default defineAdapter({
     parse: parseSSE,
   },
 
-  /** DOM 兜底：拼接最后一个助手回合内的全部 markdown 块（探针 2 只取最后一块会漏内容） */
+  /** DOM 兜底（b5 起本单锚定）：只拼接发送前基线之后新回合内的全部 markdown 块（无新回合 ⇒ 空串） */
   dom: {
     async collect(page) {
       return await collectDomAnswer(page);

@@ -8,7 +8,7 @@
 
 | 文档 | 路径 | 职责 | 状态 |
 |---|---|---|---|
-| 项目需求 | `docs/requirements/overview.md` | R1–R9 五要素与验收条目 | 已确认 |
+| 项目需求 | `docs/requirements/overview.md` | R1–R10 五要素与验收条目 | 已确认 |
 | 架构设计 | `docs/design/overview.md` | 全项目架构、进程与 MCP 接入、配置、安全、打包、接入说明四载体、关键决策 K1–K13、b1 文件计划、验收体系 | 已批准（b1 已实施） |
 | 模块 · MCP 服务面 | `docs/design/modules/mcp-server.md` | 传输、六件套工具契约、错误码权威表 | 已批准（b1 已实施） |
 | 模块 · 调度 | `docs/design/modules/scheduler.md` | 状态机、选人、并发、重试降级、超时、取消 | 已批准（b1 已实施） |
@@ -22,6 +22,7 @@
 | 批次档 b2 | `docs/batches/b2-settings-ui.md` | 同上（b2 设置界面） | 已收口 2026-10-10 |
 | 批次档 b3 | `docs/batches/b3-kimi-adapter.md` | 同上（b3 接入第二个平台 Kimi） | 已收口 2026-10-11 |
 | 批次档 b4 | `docs/batches/b4-package-ship.md` | 同上（b4 打包与换机自适配） | 已收口 2026-10-11 |
+| 批次档 b5 | `docs/batches/b5-session-reuse.md` | 同上（b5 会话复用：连续派单复用同一聊天会话） | 已收口 2026-10-11 |
 | 随批清单 b4 | `docs/batches/b4-package-ship.checklist.md` | 装机自检清单（换机验收执行件；含构建环境坑与失败读数栏） | 已交付（b4） |
 
 - `docs/requirements/specs/`：功能规格层（暂空，后续批按需建立）。

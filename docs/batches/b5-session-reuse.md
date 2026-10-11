@@ -3,7 +3,7 @@
 > 编制：主 agent · 2026-10-11 · 来源 = 用户 2026-10-10 观察（分次单独提交触发平台风控验证码；建议同一会话连续派单、阶段边界再换）+ 用户 2026-10-11 16:07「B5，依旧能拆给用免费外包，就用免费外包」+ 设计档 docs/design/modules/browser-engine.md（会话 / 配置目录 / 崩溃重启）与 adapters.md（openSession 语义）。
 > 台账 = #19（免费外包 · 归批）。前情 = docs/batches/b3-kimi-adapter.md §6（已收口 2026-10-11）。
 ## §1 讨论（主 agent）
-**状态行**：🔄 进行中（…）
+**状态行**：已收口 2026-10-11（T1 探针（两平台读数取到、D7 不触发）+ T2/T3/T4 实施交付并由父侧全套回归验收（批内单元 14/14 · b1 27/27 · b2 35/35 · b3 11/11 · verify:mcp 1/1 · engine 10/10 含 J1–J5+J8+J9 · runtime 2/2 · settings 6/6 · verify:loop 真机 1/1 · verify:loop:kimi 真机 1/1）；设计评审轮 1 changes-required → 14 条处置 → 轮 2 pass；实施侧内部代码评审 pass（🟡2🔵3 → 台账 #28）；内部背离审计因 provider 429 未跑，父侧以全套回归+读回+命名抽查替代；台账 #19 已核销）
 <§1 模板占位：本批条目 / 关键判据 / 授权口径>
 
 ### §1 讨论与来源（主包AI）
@@ -325,7 +325,7 @@ VERDICT: pass
 
 ## §5 实施记录（eng-coder）
 
-**状态行**：实施完成（T1 第 0 步探针 P1/P2 真机取数 —— D7 结论：不触发（两平台 URL 面均不变）；内部审计 acceptable · 代码评审 pass）
+**状态行**：实施完成（T1 探针 + T2/T3/T4 会话复用交付；批内单元 14/14 · verify:engine 10/10 · verify:loop 1/1；独立代码评审 pass；探索审计两次 429 待通道恢复补跑）
 
 ### T1 交付摘要（第 0 步探针）
 
@@ -373,4 +373,85 @@ VERDICT: pass
 
 **进程与端口**：两次真机运行均 `finally` 关上下文（run.log 尾行 `browser closed, exit`）；复核 = 带 `.browser-profile` 的 msedge 进程计数 **0**、无新增监听端口（Playwright 走 `--remote-debugging-pipe`）、临时件仅 `.thincoder/tmp/` 1 件（离线核验脚本）。
 
+### T2–T4 交付摘要（会话复用实施 · 2026-10-11）
+
+**交付物（写面 = §2 文件计划全项命中；逐件行数 = read 工具读数口径（"N lines total"，含末尾空行），实施后实录）**
+
+| 文件 | 现况 → 实施后 | 净增 | 说明 |
+|---|---|---|---|
+| `src/engine/session-policy.mjs` | 新增 | 121 | 状态机 + `DEFAULT_SESSION_CONFIG` + 冻结接口三方法；不 import Playwright、不碰页面 |
+| `src/engine/task-runner.mjs` | 283 → 293 | +10 | 恰在 ≤293 / 净增 ≤10 档内：import 1 + 构造器注入 1 + opening 判定分支 5 + finally 写回 3 |
+| `src/main/config-schema.mjs` | 206 → 216 | +10 | `DEFAULT_CONFIG.session` + normalize 块（非对象整块回退 + issue；非法项逐键回退） |
+| `src/main/scheduler/execution.mjs` | 287 → 288 | +1 | `task.run` 增传 `session`（与 `toggles` 同形：`{ ...this.config.current.session }`） |
+| `src/engine/adapters/deepseek.mjs` | 138 → 139 | +1 | `send()` 先记基线；注释随动（`openSession` 何时调 = 引擎判定） |
+| `src/engine/adapters/deepseek-dom.mjs` | 63 → 80 | +17 | `markAssistantBaseline` 新增 + `collectDomAnswer` 只取基线后新回合（无新回合 ⇒ 空串） |
+| `src/engine/adapters/kimi.mjs` | 76 → 77 | +1 | 同 DeepSeek 侧 |
+| `src/engine/adapters/kimi-dom.mjs` | 35 → 50 | +15 | 同 DeepSeek 侧（回合容器 = `div.chat-content-item.chat-content-item-assistant`） |
+| `docs/batches/b5-session-reuse.units.mjs` | 新增 | 164 | 批内单元（14 例；八分支 + TTL 注入 now + 写回 + normalize） |
+| `test/integration/engine-helpers.mjs` | 新增 | 168 | 抽件：`freshRoot` / `writeBrowserConfig` / `makeBrowser` / `startFixtureServer` / `closeFixtureServer`（+ 会话 fixture 页与答复路由） |
+| `test/integration/engine.test.mjs` | 274 → 199 | −75 | 抽件重构，3 例行为不变（verify:engine 读数佐证） |
+| `test/integration/engine.session.test.mjs` | 新增 | 280 | J1–J5 + J8 + J9 七场景 |
+| `package.json` | 33 → 33 | 0 | `verify:engine` 纳入双测试文件 |
+
+**验收读数（命令 + 结果）**
+
+- `node --test docs/batches/b5-session-reuse.units.mjs` ⇒ **14/14 pass**（0 fail）：决策表八分支（disabled/absent/replaced/error/canceled/ttl/count/reuse）· 优先级（disabled ⊃ replaced/ttl/count；error/canceled ⊃ ttl/count）· **TTL 边界注入 now**（恰等 ⇒ reuse、+1ms ⇒ ttl）· 写回语义（done 计数、error/canceled 只落标记、lastTaskEndedAt 更新、无单元不记账）· 两处默认值一致断言 · normalize 非法项回退（整块非对象 / reuse 非布尔 / ttlMs=0 / maxTasksPerSession=1001 / 非整数 ⇒ 回退 + issue）。
+- `npm run verify:engine` ⇒ **10/10 pass**：J1 两单复用（计数=1 + `复用会话（taskCount=1 idleMs=…）`）· J2 TTL 换新（计数=2 + `新会话（原因=ttl）`）· J3 `E_SEND_FAILED` 换新（计数=2 + `新会话（原因=error）`）· J4 上限换新（3 单 ⇒ 计数=2 + `新会话（原因=count）`）· J5 `reuse:false`（两单 ⇒ 计数=2 + 两条 `新会话（原因=disabled）`）· J8 运行中取消（`result.canceled=true` + 次单计数=2 + `新会话（原因=canceled）`）· J9 复用 × DOM 兜底（`transport=dom`；answer.md=`本单回合-2`、不含上一单 `本单回合-1`；计数=1）+ 既有 3 例（下载捕获 / profile 复用 / 开关失败）逐字不回归。
+- `npm run verify:loop`（真机，J6）⇒ **1/1 pass**：taskId=20261011-184629-c8cf，16.3s，`phases=opening>sending>extracting`，`transport=sse`，`files=[deepseek_python_20261011_51be53.py(download,46B),verify_loop.py(code_block,47B)]`，`toggles={configured:{thinking:true,search:false},payload:{thinking_enabled:true,search_enabled:false},ok:true}`；无 429 / 风控线索。**旁证收口待办 #3**：本单交付答复含代码块且被取件②命中（`verify_loop.py` 抽出）⇒ 当日探针 out19「SSE 正文呈思维链样式」未在本单复现（不宣结论，供父侧收口参考）。
+- 行数读数：全件 ≤300；`task-runner.mjs` = 293（≤293 档 ✓）。
+- 改动文件读回（D6）：13 件全部复读；node --check 全绿。
+
+**对免费外包草案的采用 / 改动（凡改给理由；合同 = §2 + 现状）**
+
+采用：`code_block_1.js`（`session-policy.mjs` 草案）主体结构与 reason 域；`code_block_4/8` 的构造器注入与 finally 写回设计。改动：
+
+1. `decide` 改为**逐次接收 `config`**（`decide({workerId, now, config, page})` = §2 冻结接口原文；草案由构造器 / `setConfig` 持配置）⇒ 删草案 `setConfig`（冻结接口未列；配置逐次透传 = D1 方案 A 口径，改值下次派单即生效）。
+2. `recordOutcome` 去掉草案 `recordable` 形参（冻结接口只列 `{outcome, at}`）；`newChat !== false` 记账守卫按 §2 机制设计 4 落**调用点**（task-runner finally）。
+3. 构造器注入去掉草案的 `config: DEFAULT_SESSION_CONFIG` 参数（理由同 1）。
+4. finally 写回去掉草案的 try/catch 包裹——净行数 ≤10 硬档；`recordOutcome` 为纯内存操作（无 IO / 无日志 / 无抛错路径）。
+5. opening 分支压缩为 8 行（草案 11 行）：语义逐条一致（decide → reuse 记日志 / 否则 openSession + markNewSession）；压缩手段 = `else` 收窄与单行 if。
+6. `markAssistantBaseline`（DOM 本单锚定）= 本单新增（草案未含；§2 T2 评审 #9 要求），落 4 个适配器文件；`matchStreamUrl` / `kimi-stream.match` 零改动（T1 判 D7 不触发，按禁止面执行）。
+
+**决策透明表（本单内；逐条给理由与被否方案）**
+
+| # | 决策 | 理由 | 被否方案 |
+|---|---|---|---|
+| 1 | 草案配置改「逐次透传」并删 `setConfig` | 对齐 §2 冻结接口 + D1 方案 A（单一事实源；改值下次派单即生效） | 保留构造器配置（与冻结接口不符；生效时机不明） |
+| 2 | 记账守卫放调用点（去 `recordable` 形参） | 冻结接口只列 `{outcome, at}`；守卫语义 = 机制设计 4 | 守卫放 policy 内（多一形参 = 偏离冻结接口） |
+| 3 | finally 写回不包 try/catch | 行数硬档（≤293）；纯内存操作无抛错路径 | 包 try/catch（越 ≤293 档） |
+| 4 | DOM 基线 = 给现存块/回合打 `data-*` 属性 | §2「存储形式自由」；按页隔离（同平台双 worker 并发不串）；比对 = `closest([attr])` 自含 | 模块级变量存计数（双 worker 同平台并发会串）；按序号取（重渲染即错位） |
+| 5 | fixture 会话页与答复路由放 `engine-helpers.mjs`（`/api/chat` 回应答、`/api/hang` 永不回包） | 两测试文件共用一服务器 = 单一抽件；J8/J9 的「流未捕获」= 永不回包（请求可观测 ⇒ send 确认成立） | 各测试自建服务器（重复件）；改用离线 IP（受环境差异影响） |
+| 6 | 行数档口径 = read 工具读数（含末尾空行） | 与 §2 表头声明一致（原始 283 与父侧读数一致） | wc -l 口径（少 1，与档面读数错位） |
+
+**审计与代码评审（本会话内，轮次与终态）**
+
+- **内部背离审计**（explore 子代理·只读，对设计/验收逐条对照）：**未运行** —— 两次 spawn（首试 + 单次重试）均返回 `LLM API error 429: {"error":{"message":"rpm exhausted","type":"quota_exceeded_error","code":"8"}}`；按本批环境纪律「遇 429 / 额度类错误立即停止重试并如实报」停止，不重试、不以自审冒充。终态 = **待通道恢复由父侧补跑**。
+- **内部代码评审**（advisor·code，对象 = 13 件写面 + 本档 §2 / `browser-engine.md`）：**VERDICT = pass** —— 🟡 2 · 🔵 3，全部非阻断（advisory）：① `markAssistantBaseline` 的 `.catch(() => 0)` 静默吞（极端窗口下基线丢失、DOM 兜底可回落「最后稳定文本」；建议补一行日志——窗口极窄）；② 锚定粒度（`closest('[class*="message"]')` = 单回合 vs 整列表）真机未取数（J9 只到 fixture 层；J6 走 sse），建议收口补一次真机 DOM 路径读数；③ `decide` 的 `now` 无缺省值（健壮性）；④ `newChat:false` 守卫无测试覆盖；⑤ 文件表行数待按实际回调。评审回执中 2 条引用未过机械核对（原因 = file unreadable / 路径解析），非语义问题（抽查 task-runner 末行引文与现况一致）。
+- **fix round**：**0 轮** —— 无必须修正项；advisory 项改动会使评审对象失效（D5 冻结窗），不擅动，留父侧收口裁量。
+
+**已知差异与残留（照实）**
+
+1. §2 文件表「预期」列待按上表实际回调（`deepseek-dom.mjs` 80 / `kimi-dom.mjs` 50 越该行「各 ≤ +~12」预估；`engine-helpers.mjs` 168 / `engine.session.test.mjs` 280 / `units` 164 vs 预估 ~80 / ~230 / ~155）；机制与 ≤300 档不受影响。
+2. 真机「复用 × DOM 兜底」仍为未取数状态（J9 = fixture 层；人工场景 M + 收口可选补跑）。
+3. 上抛项承 §2 U1–U6 不变（U5 默认值上界仍无读数：T1 只给下界旁证）。
+
+**进程与端口（本单）**：自身零残留——两测试路径 `finally` 均 `closeAll()` + `closeFixtureServer()`（含 `closeAllConnections` 处理悬挂请求）；loop 真机应用优雅退出（断言通过）；核查 = 无引用 `verify-engine` / `verify-loop` / `.browser-profile` 的进程。**发现非本单产物**：一个 16:13 启动的既有 app 实例（electron PID 17428 + 引擎子进程 14196（`src/engine/host.mjs`）+ msedge profile `AppData\Roaming\free-outsource\profiles\w-1`，占用 127.0.0.1:17873）——早于本单开工（18:38）且指向真实 userData ⇒ 非本单启停物，**未处置**（不杀他人在用实例），照实报。
+
 ## §6 验证与收口（父代理）
+
+### b5 收口（2026-10-11）
+
+**收口检查（D7 结算同步）**
+- **T1–T4 全部交付并父侧核验**：T1 探针（#77：两平台读数取到，**D7 不触发**，`stream.match` 零改动）· T2 引擎侧 + T3 主进程侧 + T4 测试面（#78：一次实施完成）。
+- **父侧验收（主包AI 亲跑——唯一一次仓库套件运行）**：b5 批内单元 **14/14** · b1 归档单元 **27/27** · b2 **35/35** · b3 **11/11** · `verify:mcp` 1/1 · `verify:engine` **10/10**（含 J1–J5 + J8 + J9）· `verify:runtime` 2/2 · `verify:settings` 6/6 · **`verify:loop`（DeepSeek 真机）1/1**（16.3s）· **`verify:loop:kimi`（Kimi 真机）1/1**。
+- **关键读数**：J1 两单复用 ⇒ `openSession` 计数 = **1** + 日志「复用会话（taskCount=1 idleMs=…）」；J2 TTL ⇒ **2** +「原因=ttl」；J3 出错 ⇒ **2** +「原因=error」；J4 上限 ⇒ **2** +「原因=count」；J5 禁用回退 ⇒ 每单新建 +「原因=disabled」；J8 取消 ⇒ **2** +「原因=canceled」；J9 复用 + 流未捕获 ⇒ 交付文本 =「本单回合-2」（**不含**上一单「本单回合-1」，`transport=dom`）。
+- **文件表实际值（§2「预期」列的回调；逐件 ≤300 ✓）**：`src/engine/session-policy.mjs` **121（新增）** · `src/engine/task-runner.mjs` 283 → **293** · `src/main/config-schema.mjs` 206 → 216 · `src/main/scheduler/execution.mjs` 287 → 288 · `src/engine/adapters/deepseek-dom.mjs` 63 → **80** · `src/engine/adapters/kimi-dom.mjs` 35 → **50** · `src/engine/adapters/deepseek.mjs` 138 → 139 · `src/engine/adapters/kimi.mjs` 76 → 77 · `test/integration/engine-helpers.mjs` **168（新增）** · `test/integration/engine.session.test.mjs` **280（新增）** · `test/integration/engine.test.mjs` 274 → **199**（抽件）· `docs/batches/b5-session-reuse.units.mjs` **164（新增）** · `package.json` 33（`verify:engine` 行纳入两测试文件）。
+- **免费外包产出的采用与偏差**：引擎侧草案（`outbox/20261011-181601-29dc`，41 秒交付）被**采用并改动 6 处**（逐条理由见 §5）；T3/T4 那一份因通道对「长任务 + 多附件」连败（`E_SEND_FAILED` → `E_STREAM_PARSE`）**未采用**，改由 coder 直接实施——不影响交付，成本口径照实记录。
+- **本批缺陷与修复**：无回滚级缺陷。设计评审 2 轮（轮 1 changes-required → 14 条处置 → 轮 2 pass）；实施侧内部代码评审 1 轮 **pass**（🟡 2 · 🔵 3，全部非阻断）；**内部背离审计因 provider 429 未跑**（两次 spawn 均失败，如实报）⇒ 父侧以「全套回归 + 关键文件读回 + 冻结接口命名抽查」替代核验。
+- **留下的 🟡（已入台账 #28，不阻塞）**：① 基线打标失败被静默吞（建议补日志）② `decide` 的 `now` 无缺省值 ③ `newChat:false` 守卫无测试覆盖 ④ **真机「复用 × DOM 兜底」补一次读数**（本批 J9 只到 fixture 层；`adapters.md` §3.4 是本单锚定口径）。
+- **人工场景**：`verify:loop` / `verify:loop:kimi` 已覆盖两平台端到端；**Kimi 工位（w-2）需人工登录一次**（首次派单报 `E_LOGIN_REQUIRED`，登录后点托盘「我已处理（清除外包工冷却）」即可用）。
+- **台账**：#19 本批覆盖并核销；新增 **#27**（设置界面补复用开关与两键）· **#28**（本批 🟡 收尾项）。
+- **暂缓批复核**：无。
+- **旁证（不宣结论）**：T1 探针报的「SSE 正文呈思维链样式」在本批真机交付中**未复现**（取件②正常命中）——供后续批次参考。
+
+**冻结**：本记录自「已收口」状态行起冻结，此后不再回改。
