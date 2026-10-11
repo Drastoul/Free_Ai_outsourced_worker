@@ -17,7 +17,12 @@
 - 删除：二次确认（提示该外包工的浏览器配置目录保留）。
 - 调序：上移 / 下移按钮 ⇒ 直接改 `workers` 数组顺序（优先级单一来源）。
 - 改名：列表内唯一性校验；改名即改变「主包AI 指定调用」用的名字（需求 4b）。
-- 开关项（R8）：每行两个开关「深度思考」「联网搜索」（配置 `toggles.thinking` / `toggles.search`，默认关），文案标注「派单时自动应用」；改动随其余设置即时落盘（§7）；应用侧规则见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」。
+- 开关项（R8）：两个开关「深度思考」「联网搜索」（配置 `toggles.thinking` / `toggles.search`，默认关），文案标注「派单时自动应用」（渲染范围见下条）；改动随其余设置即时落盘（§7）；应用侧规则见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」。
+- **开关的按子键能力门控（b6）**：每个开关按**子键能力**渲染——快照 `platforms[].toggles`（形态 `{thinking, search}`）中该子键为 `true` 才渲染对应的 `[data-toggle]`（文案「派单时自动应用」同限）；不受支持的子键不渲染开关，收进行内一行提示（锚点 `[data-field=toggles-unsupported]`，文案含未受支持子键名）。
+  示例：Kimi = `{thinking:false, search:true}` ⇒ 只渲染「联网搜索」，「深度思考」以提示行明示不支持。
+- **能力来源与回退**：快照 `platforms[].toggles`（主进程由适配器注册表派生并归一化，与引擎分支条件同源）；快照缺信息 / 未知平台 ⇒ 两子键按不支持渲染。
+- **会话复用块（b6）**：外包工页顶部「会话复用（全局）」块（锚点 `[data-field=session-policy]`；控件 `[data-field=session-reuse|session-ttl-ms|session-max-tasks]`）读写配置 `session` 键（机制权威 = `docs/design/modules/browser-engine.md` §9）。
+  写路径 = 补丁操作 `session.set`（§7）；非法 / 越界输入不提交、输入回退快照值并以 `[data-field=session-error]` 行内提示；说明文案明示后果（复用 = 相邻任务共享上下文；出错 / 超时 / 取消后自动换新会话）。
 - 状态检查：「打开并检查」按钮——打开 / 复用该外包工浏览器窗口到平台页，刷新登录态显示；未登录（`login_required`）时即**登录引导**：窗口留给人工完成登录，并明示「登录态只存本机，换机后每个平台需重新登录一次」（R9·F9.4）。
 - 交互规则：增删改序即时落盘（原子写）+ 即时生效；写入失败（占用 / 权限）弹错并回滚显示。
 
@@ -55,6 +60,7 @@
 
 - 渲染进程只经 IPC：`fo:snapshot` / `fo:patch`（**通道名以此为准**——八方法各自的通道常量与 `window.fo` 暴露面同处 `src/settings/preload.cjs`，跨面改动须两处同步）；主进程负责校验、原子写、广播变更（单一写者）。
 - 手改 config.json：下次启动生效；不做文件监听（避免读入半写状态）。
+- **窗口加载完成补推（b6）**：设置窗口页面 `did-finish-load` 后补推一次全量快照——启动期开窗（`FO_OPEN_SETTINGS` / 托盘 / 二实例，早于 MCP 就绪）时首帧快照可能为「未启动」，而那一刻的变更广播在页面加载期会被渲染层丢弃；补推保证页面加载完成后拿到服务实况（幂等：无变化也只是重画一次）。
 
 ## 8. 验收判据（b2）
 
@@ -62,3 +68,5 @@
 - AC-R8-2 的界面侧：开关随外包工呈现且改动落 config.json；改值后复测派单载荷随动（应用侧判据见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
 - AC-R9 的界面侧：实际地址显示 / 一键复制两形态 / 一键导出为文件 / 导出目录可见（AC-R9-2 的界面片段来源、AC-R9-4 的「与界面实际显示一致」核对面）。
 - 复测：调序后 `list_workers` 顺序与实际选人随动（复测 AC-R4a-1）。
+- 开关的按子键门控与快照 `platforms[].toggles`（b6）：`npm run verify:settings` 断言——不受支持的子键不渲染对应开关且行内明示；快照 `platforms[].toggles`（`{thinking, search}` 子键对象）与适配器能力位一致（DeepSeek `{true,true}` / Kimi `{false,true}`）。
+- 会话复用块与 `session.set`（b6）：`npm run verify:settings` 断言——快照 `session` 三键 == config.json 值；非法输入不提交且值回滚；合法写落盘且快照双读一致。

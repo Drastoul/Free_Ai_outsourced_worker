@@ -1,11 +1,13 @@
 // 设置界面的配置变更纯函数与校验（b2；唯一写入口 = patch 清单）。
-// 设计权威：docs/design/modules/settings-app.md §2 / §5 / §7；操作清单与形状 = 批次档 b2 §2「冻结接口」：
+// 设计权威：docs/design/modules/settings-app.md §2 / §5 / §7；操作清单与形状 = 批次档 b2 §2「冻结接口」
+//（b6 增补 session.set，见批次档 b6 §2「冻结接口」）：
 //   worker.add {platform} · worker.remove {id} · worker.rename {id, name} · worker.move {id, dir: up|down}
 //   · worker.setEnabled {id, enabled} · worker.setToggles {id, toggles} · outbox.set {dir}
+//   · session.set {reuse?, ttlMs?, maxTasksPerSession?}（至少一键；部分更新）
 // 纯函数：不改传入配置（深拷贝后变更，返回新配置）；目录可用性以注入检查器判定（checkDir ⇒ Promise<boolean>）。
 // 校验失败 ⇒ {ok:false, error}（调用方弹错、不落配置）；成功 ⇒ {ok:true, config}（调用方原子写 + 广播）。
 
-/** 七操作清单（冻结；顺序即文档顺序） */
+/** 八操作清单（冻结；顺序即文档顺序；b6 增 session.set） */
 export const PATCH_OPS = [
   'worker.add',
   'worker.remove',
@@ -14,6 +16,7 @@ export const PATCH_OPS = [
   'worker.setEnabled',
   'worker.setToggles',
   'outbox.set',
+  'session.set',
 ];
 
 /** 平台清单：新增入口可见项（加平台 = 加适配器 + 加行；b3 起 DeepSeek / Kimi 均已注册，均可选） */
@@ -67,7 +70,7 @@ function uniqueId(workers) {
 }
 
 // ---------------------------------------------------------------------------
-// 七操作
+// 八操作
 // ---------------------------------------------------------------------------
 
 function addWorker(next, op) {
@@ -164,6 +167,12 @@ function setToggles(next, op) {
   return pass(next);
 }
 
+function pickSessionInt(value, label, min, max) {
+  const ok = typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+  if (ok) return { ok: true, value };
+  return { ok: false, error: `${label} 非法（应为 ${min}..${max} 区间内的整数）：${JSON.stringify(value)}` };
+}
+
 async function setOutbox(next, op, checkDir) {
   const extra = checkKeys(op, ['dir']);
   if (extra) return fail(extra);
@@ -178,6 +187,32 @@ async function setOutbox(next, op, checkDir) {
   }
   if (!usable) return fail(`目录不可用（不存在且不可创建，或不可写）：${dir}`);
   next.outboxDir = dir;
+  return pass(next);
+}
+
+/** session.set（b6/T7）：部分更新全局会话复用三键；区间与 config-schema.mjs 归一化同口径（非法 / 越界 ⇒ 拒绝、不落配置） */
+function setSession(next, op) {
+  const extra = checkKeys(op, ['reuse', 'ttlMs', 'maxTasksPerSession']);
+  if (extra) return fail(extra);
+  const picked = {};
+  if (op.reuse !== undefined) {
+    if (typeof op.reuse !== 'boolean') return fail(`reuse 非法（应为布尔）：${JSON.stringify(op.reuse)}`);
+    picked.reuse = op.reuse;
+  }
+  if (op.ttlMs !== undefined) {
+    const r = pickSessionInt(op.ttlMs, 'ttlMs', 1, Number.MAX_SAFE_INTEGER);
+    if (!r.ok) return fail(r.error);
+    picked.ttlMs = r.value;
+  }
+  if (op.maxTasksPerSession !== undefined) {
+    const r = pickSessionInt(op.maxTasksPerSession, 'maxTasksPerSession', 1, 1000);
+    if (!r.ok) return fail(r.error);
+    picked.maxTasksPerSession = r.value;
+  }
+  if (!Object.keys(picked).length) {
+    return fail('session.set 至少给出 reuse / ttlMs / maxTasksPerSession 之一（部分更新）');
+  }
+  next.session = { ...(isPlainObject(next.session) ? next.session : {}), ...picked };
   return pass(next);
 }
 
@@ -219,6 +254,8 @@ export async function applyPatch(config, op, { checkDir } = {}) {
       return setToggles(next, op);
     case 'outbox.set':
       return setOutbox(next, op, checkDir);
+    case 'session.set':
+      return setSession(next, op);
     default:
       return fail(`未知操作：${name}`);
   }

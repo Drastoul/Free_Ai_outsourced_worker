@@ -5,8 +5,8 @@
  * 平台由环境变量 `FO_LOOP_PLATFORM` 选择（默认 `deepseek`：不带 env 时行为逐字同今日）。
  * 条件断言口径 = `docs/batches/b3-kimi-adapter.md` §2「验收命令」③–⑥：
  *   · `capabilities.downloadCapture === false` ⇒ 不得出现 `source='download'`，且须至少一个 `source='code_block'`（取件层②保底）；
- *   · `capabilities.toggles !== true` ⇒ 跳过载荷断言（不锁 `manifest.toggles.payload` / `ok` 值——
- *     `requestPayloadCapture=true` 时 payload 照常回报非空，属机制设计明示的合法路径）。
+ *   · `capabilities.toggles` 无受支持子键，或 `requestPayloadCapture !== true`（payload 恒 `null` 属合法路径）
+ *     ⇒ 跳过载荷断言（不锁 `manifest.toggles.payload` / `ok` 值）；否则只对**受支持子键**核对载荷（b6 子键口径）。
  * 能力位从适配器注册表读取（与实现同源，不在测试里另抄一份）。
  */
 import assert from 'node:assert/strict';
@@ -60,15 +60,18 @@ export function assertDeliveryOutcome({ capabilities, manifest, fileNames, taskD
 
 /**
  * 开关判据（AC-R8-1）+ 按能力位条件断言。
- * `capabilities.toggles === true` ⇒ 载荷核对（`configured` ↔ `payload` 一致）；否则跳过载荷断言。
+ * b6 起 `capabilities.toggles` 为子键对象：受支持子键（逐键取真）参与核对；无受支持子键 ⇒ 跳过；
+ * `requestPayloadCapture !== true` ⇒ 跳过载荷断言（不锁 `payload` / `ok`——未捕获属合法路径）。
  * @returns {object|null} 载荷核对面返回 `manifest.toggles`（供读数）；跳过面返回 null。
  */
 export function assertTogglesOutcome({ capabilities, manifest, wantToggles }) {
   assert.deepEqual(manifest.toggles?.configured, wantToggles, `manifest.toggles.configured 应等于外包工配置值：${JSON.stringify(manifest.toggles)}`);
-  if (capabilities.toggles !== true) return null; // 无开关能力位 ⇒ 跳过载荷断言（§2 验收⑥）
+  const supported = ['thinking', 'search'].filter((key) => capabilities.toggles?.[key] === true);
+  if (!supported.length || capabilities.requestPayloadCapture !== true) return null; // 跳过载荷断言（§2 验收⑥/⑫）
   assert.ok(manifest.toggles?.payload, `未捕获请求载荷（toggles=${JSON.stringify(manifest.toggles)}）`);
-  assert.equal(manifest.toggles.payload.thinking_enabled, wantToggles.thinking, '载荷 thinking_enabled 应与配置一致');
-  assert.equal(manifest.toggles.payload.search_enabled, wantToggles.search, '载荷 search_enabled 应与配置一致');
-  assert.equal(manifest.toggles.ok, true, 'configured 与 payload 应一致');
+  for (const key of supported) {
+    assert.equal(manifest.toggles.payload[`${key}_enabled`], wantToggles[key], `载荷 ${key}_enabled 应与配置一致`);
+  }
+  assert.equal(manifest.toggles.ok, true, '受支持子键上 configured 与 payload 应一致');
   return manifest.toggles;
 }

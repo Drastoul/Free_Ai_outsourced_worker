@@ -33,7 +33,7 @@ export default defineAdapter({
     downloadCapture: true,
     codeBlockExtract: true,
     streamCapture: true,
-    toggles: true,
+    toggles: { thinking: true, search: true },
     requestPayloadCapture: true,
   },
 
@@ -104,7 +104,7 @@ export default defineAdapter({
 
   /** 发送：先记「助手回合基线」（b5 本单锚定）→ 聚焦输入框 → insertText →（落地失败兜底逐字 type）→ Enter */
   async send(page, text, ctx = {}) {
-    await markAssistantBaseline(page);
+    await markAssistantBaseline(page, { log: ctx.log });
     return await sendText(page, text, ctx);
   },
 

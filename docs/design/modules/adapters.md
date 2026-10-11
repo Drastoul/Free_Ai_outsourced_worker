@@ -18,13 +18,13 @@ export default {
   url: 'https://chat.deepseek.com/',
   capabilities: {                 // 能力声明（调度与取件据此分支）
     newChat: true, upload: true, downloadCapture: true, codeBlockExtract: true, streamCapture: true,
-    toggles: true,                // 外包工开关（R8，见 §3.8）；false ⇒ 引擎跳过开关子步
+    toggles: { thinking: true, search: true },  // 外包工开关（R8，见 §3.8）——**按子键**声明（b6 起；旧值 true/false 经归一化展开）；不受支持子键 ⇒ 引擎跳过该子键、设置界面不渲染对应开关
     requestPayloadCapture: true,  // 请求载荷捕获（R8 核对）：从 chat/completion 请求体读出 thinking_enabled / search_enabled（见 §3.8）
   },
   selectors: { /* 页面元素台账，见 §3.1 */ },
   checkLogin(page),               // → 'ready' | 'login_required' | 'captcha'
   openSession(page),              // 新建聊天会话（何时新建由 docs/design/modules/browser-engine.md §9 判定；复用命中 ⇒ 不调用）
-  applyToggles(page, toggles),    // 开关对齐（R8）：失败 ⇒ E_SELECTOR_MISSING、不发送（见 §3.8）
+  applyToggles(page, toggles),    // 开关对齐（R8）：入参 = 受支持子键的子集（b6 起）；失败 ⇒ E_SELECTOR_MISSING、不发送（见 §3.8）
   requestPayload: { toggles(payload) },  // 纯函数（可单测）：从 chat/completion 请求载荷读出 { thinking_enabled, search_enabled }；未捕获 / 键缺失 ⇒ null（R8 核对，见 §3.8）
   uploadFiles(page, files),       // 附件上传
   send(page, text),               // 发送任务文本
@@ -77,6 +77,7 @@ export default {
 - 触发条件：网络流未捕获（平台改版 / 拦截失败）且 DOM 文本连续稳定（探针窗口：2s × 3 次稳定）。
 - 兜底时同样要等到「结束」——以文本稳定替代流内结束标记。
 - **本单回合锚定（b5 起，所有适配器通用）**：会话复用（`modules/browser-engine.md` §9）下页面留存上一单回合 ⇒「页面最后一个稳定文本」不再是完成判据；`send()` 记录**发送前助手回合基线**（回合计数 / 末回合标识，存储形式自由），`dom.collect()` 只接受**基线之后出现的新回合**；无新回合 ⇒ 返回空串（引擎按 `E_NO_RESPONSE` 处置——不静默交付旧答复）。判据 = `npm run verify:engine`「复用 × DOM 兜底」例（交付文本 = 本单回合、不含上一单文本）。
+- **基线打标失败不静默（b6）**：`send()` 记基线的动作失败（页面异常等极端窗口）⇒ 记一行日志（词形 `助手回合基线打标失败…`）并继续发送——不升级为任务失败（DOM 只是兜底通道）；此时 DOM 兜底可能把上一单回合计入，日志为事后取证线索。
 
 ### 3.5 取件三层与送件
 
@@ -103,10 +104,11 @@ export default {
 - 点击策略：首选 `page.locator(...).click()`（探针 5 实测一击生效，`probe/out5/run.log:3-4`）；失败逐级兜底 = `force` → JS `click()` → 坐标点击（`mouse.click`）→ 事件派发（pointer / mouse 序列）；**每级策略后均以 `aria-checked` 复核**，生效即止；全部无效 ⇒ 判应用失败（策略对照 `probe/probe5-deepseek-toggle-click.mjs:50-81`）。
 - 发送前复核：两开关状态与配置一致才进入发送；元素缺失 / 切换后状态不符 ⇒ `E_SELECTOR_MISSING`（按「外包工不可用（可降级）」处置，见调度档「重试与降级」），**不静默带错发送**。
 - 权威核对：以 `chat/completion` 请求载荷的 `thinking_enabled` / `search_enabled` 为最终真相（探针 5 实测 `thinking=true search=false`，`probe/out5/run.log:6`）；核对结果随任务记录（`manifest.toggles`，见 `docs/design/modules/outbox.md`）。
-- 捕获与回报：引擎按 `stream.match` 命中本任务 `chat/completion` 请求（`page.on('request')`）⇒ 取请求体交 `requestPayload.toggles(payload)`（§2）读出两键；任务收尾时随结果清单回报 `toggles: {configured, payload, ok}`（`configured` = 传入配置值回显、`payload` 未捕获 ⇒ `null`、`ok` = 两者一致；清单形状见 `docs/design/overview.md` §3.2 第 7 步）——主进程据此写 `manifest.toggles`。
+- 捕获与回报：引擎按 `stream.match` 命中本任务 `chat/completion` 请求（`page.on('request')`）⇒ 取请求体交 `requestPayload.toggles(payload)`（§2）读出两键；任务收尾时随结果清单回报 `toggles: {configured, payload, ok, checked, unsupported}`——`configured` = 传入配置值回显（全两键）、`payload` 未捕获 ⇒ `null`（形状 = 各适配器映射原形）、`ok` = **受支持子键上** `payload` 与 `configured` 全等（b6 起；`payload` 未捕获 ⇒ `null`）、`checked` = 本次核对范围的受支持子键清单、`unsupported` = 其余子键（清单形状见 `docs/design/overview.md` §3.2 第 7 步）——主进程据此写 `manifest.toggles`（字段语义见 `docs/design/modules/outbox.md`）。
 - 日志落点（AC-R8-2 日志侧）：应用 / 复核后记一行「目标值 / 实际值 / 复核结果」——目标值 = `configured`、实际值 = 页面 `aria-checked` 复核读数、复核结果 = `ok` 一致判定；不含敏感值（令牌 / Cookie 不入日志，口径见 `docs/design/overview.md`「安全」）；判据主次 = 载荷随动 + `manifest.toggles` 为主、本日志为辅。
 - 已知观察（不影响交付）：深度思考开启后的「思考文本」流分片本轮未观测到（`probe/out5/run.log:9` thinkingLen=0）；开关生效以载荷核对为准；THINK 分片若出现，按 §3.3 帧形态 A 规则入思考区、不混入正文。
-- 无此能力的平台（`capabilities.toggles = false`）⇒ 跳过本子步（配置值保留、不报错）。
+- **按子键执行（b6 起）**：应用与复核只对 `capabilities.toggles` 中声明为 `true` 的子键生效；不受支持子键跳过（配置值保留、不报错）；全部子键都不受支持 ⇒ 本子步整体跳过。
+  归一化口径（`defineAdapter`）：能力位缺省 / 非法 ⇒ 两子键均不支持；旧值 `true` ⇒ 两子键均支持（兼容展开，不制造行为跳变）。
 
 ## 4. 新增平台接入清单（Kimi 等，b3）
 
@@ -140,6 +142,7 @@ export default {
 | 下载 | **无下载按钮**（静态 / hover 后均无）⇒ `downloadCapture=false` | `probe/out18`（K7，4 轮一致） |
 | 答复容器 | `div.chat-content-item.chat-content-item-assistant` → `div.segment.segment-assistant` → `div.segment-container` → `div.segment-content` → `div.segment-content-box` | `probe/out18`（K9） |
 | 正文块 / 思考区 | 正文 = `div.paragraph` + `div.syntax-highlighter.segment-code-content`（嵌套 `pre.language-python` 须**去重**）；**思考区文本同为 `div.paragraph`** ⇒ 须排除 `[class*="toolcall-content"]` / `thinking-container` 并**按 DOM 序**采集；**不可按 `toolcall` 粗排除**（答案区同在 `toolcall-rollup` 下） | `probe/out18`（K9；`naive` 口径混入思考文本已验证） |
+| 联网搜索（R8·search 子键） | 工具面板触发器 `div.icon-button.toolkit-trigger-btn`（`data-testid=toolkit-trigger-btn`）→ 行 `button.toolkit-item[role=menuitem]`（文案「联网搜索」）→ 子面板两行「自动搜索」/「关闭搜索」，状态读 `aria-checked` | `probe/out17`（A1，3 轮一致；选「关闭搜索」⇒ 请求 `tools` 去掉 `TOOL_TYPE_SEARCH`） |
 
 - **空会话判据补充**：会话区容器不存在 ⇒ 按空会话判（首页空态）。
 - **复用下的本单锚定（b5）**：同 §3.4——`send` 时记基线、`collect` 只取基线后的新回合（回合容器 = `div.chat-content-item.chat-content-item-assistant`；实现落 `src/engine/adapters/kimi-dom.mjs`）。
@@ -150,7 +153,7 @@ export default {
 - **两类帧形分别处理**：**SET 帧**（`"mask":"block.text"` / `"block.think"`，内容嵌在值内）⇒ **首帧快照必须计入正文与思考区**（丢首字先例见 §3 基线更正）；**append 帧**（`"mask":"block.text.content"` / `"block.think.content"`）⇒ 追加固有序内容。
 - **finished 判定顺序**：① `{"done":{}}` 帧出现 ⇒ finished（最高优先）；② 否则**仅助手消息**按 role / id 归并（system / user 消息同样带 `MESSAGE_STATUS_COMPLETED`，**不计**）；③ 无结束标记 ⇒ 抛 `E_STREAM_PARSE`。
 - **重复 SET 快照（同 `block.id` 二次快照）**：按追加处理（样本每 block 仅一次快照，未被证伪）。
-- 载荷读键（**仅供核对，本批未启用**）：`options.thinking` ↔ thinking；`tools` 含 `TOOL_TYPE_SEARCH` ↔ search。
+- 载荷读键：`options.thinking` ↔ thinking；`tools` 含 `TOOL_TYPE_SEARCH` ↔ search。启用由 `capabilities.requestPayloadCapture` 把守（b6 起为 search 核对候选；**C1 取数已命中 ⇒ 落值 `true`**（search = 应用 + 复核），口径见 `docs/batches/b6-small-items-and-repack.md` §2）。
 - 版本化 fixture 与期望基线：`docs/batches/b3-kimi-adapter.fixtures/`（`chat-resp.txt` 逐字节副本 + 期望正文/思考，**独立推导、不得用被测解析器生成**）。
 
 ### 5.3 能力位（Kimi）
@@ -159,9 +162,10 @@ export default {
 |---|---|---|
 | `newChat` / `upload` / `streamCapture` / `codeBlockExtract` | `true` | K4 / K5 / K6 / K6 样本 |
 | `downloadCapture` | `false` | K7 无下载按钮 ⇒ 取件走层②③ |
-| `toggles` | `false` | K8：search 键可对齐，但 thinking 键无控件且 `options.thinking` 恒 true ⇒ 落 true 会让 `manifest.toggles.ok` 恒判 false（失真）；「按子键能力位」另批议 |
-| `requestPayloadCapture` | `false` | 同 `toggles` 口径（载荷不可核对则不假装可核对）⇒ `manifest.toggles.payload` 恒 `null` 属合法路径 |
+| `toggles` | `{ thinking: false, search: true }` | b6 子键化：search 可对齐（`probe/out17` A1，3 轮一致）；thinking 无控件且 `options.thinking` 恒 true ⇒ 如实声明为不支持（不再拖 `manifest.toggles.ok`） |
+| `requestPayloadCapture` | `true`（**b6 取数命中**） | 已实测：引擎 `request.postData()` 路径可读出分帧请求体 ⇒ Kimi 的 search 子键**既应用亦复核**；`payload` 键形 = `{thinking_enabled, search_enabled}`（与 `answer.mjs` 的 `ok` 比对读键同源）；未捕获 ⇒ `ok` 为 `null`（合法路径，不伪装绿） |
 
-- **无开关能力的平台** ⇒ 引擎跳过应用与复核子步、配置值保留不报错（§3.8 末行口径）；该平台 AC-R8-1/2/3 不适用（需求档同口径）。
-- **已知不符（已记账）**：设置界面仍对 Kimi 渲染「深度思考 / 联网搜索」两开关并标「派单时自动应用」，与该能力位不符 ⇒ 收口/后续项。
+- **无受支持子键的平台** ⇒ 引擎跳过应用与复核子步、配置值保留不报错（§3.8 末行口径）；该平台 AC-R8-1/2/3 不适用（需求档同口径）；**部分子键受支持**的平台按受支持子键执行。
+- **界面呈现（b6 起）**：按子键渲染——不受支持的子键不渲染开关、行内明示（口径 = `docs/design/modules/settings-app.md` §2；能力源 = `capabilities.toggles` 子键对象，经快照 `platforms[].toggles` 与引擎分支条件同源）。
+- **Kimi 的 search 应用机械（b6）**：面板触发器 + 子面板两行的操作与复核落 `src/engine/adapters/kimi-toggles.mjs`（`kimi.mjs` 的 `applyToggles` 只收 search 子键）；失败（元素缺失 / 状态不符）⇒ `E_SELECTOR_MISSING`，不发送（§3.8 同口径）。
 

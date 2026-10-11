@@ -11,8 +11,8 @@ const BODY_BLOCK_SELECTOR = 'div.paragraph, .segment-code-content';
 const EXCLUDE_SELECTOR = '[class*="toolcall-content" i], [class*="thinking-container" i]';
 const BASELINE_ATTR = 'data-fo-dom-baseline';
 
-/** 发送前记「助手回合基线」（b5 本单锚定）：给当前全部助手回合打标（复用会话时页面留存上一单回合） */
-export async function markAssistantBaseline(page) {
+/** 发送前记「助手回合基线」（b5 本单锚定）：给当前全部助手回合打标（复用会话时页面留存上一单回合）；失败 ⇒ 记一行日志、仍返回 0（b6） */
+export async function markAssistantBaseline(page, { log } = {}) {
   return await page
     .evaluate(
       ({ turnSel, attr }) => {
@@ -22,7 +22,11 @@ export async function markAssistantBaseline(page) {
       },
       { turnSel: ASSISTANT_TURN_SELECTOR, attr: BASELINE_ATTR },
     )
-    .catch(() => 0);
+    .catch((e) => {
+      // 打标失败不静默（b6）：DOM 兜底可能把上一单回合计入，日志为事后取证线索；不升级为任务失败（仍返回 0）
+      log?.(`助手回合基线打标失败：${String(e?.message ?? e).slice(0, 120)}`);
+      return 0;
+    });
 }
 
 /** 拼接基线之后最后一个新助手回合内的正文块（按 DOM 序，`\n\n` 分隔；无新回合 ⇒ 空串） */

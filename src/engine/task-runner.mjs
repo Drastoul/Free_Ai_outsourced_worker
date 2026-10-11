@@ -164,7 +164,7 @@ export class TaskRunner {
                 this.sessionPolicy.markNewSession(worker.id, { reason: decision.reason, page, at: Date.now() });
               }
             }
-            if (adapter.capabilities.toggles) {
+            if (adapter.capabilities.toggles.thinking || adapter.capabilities.toggles.search) {
               await applyTogglesWithLog({ page, adapter, toggles, stage: '应用', log: this.log });
             }
           },
@@ -192,12 +192,12 @@ export class TaskRunner {
       // ── sending：发送前复核开关 → 发送 → 发送确认 ──
       this.#progress(taskId, 'sending');
       capture = attachStreamCapture(page, adapter);
-      if (adapter.capabilities.toggles) {
+      if (adapter.capabilities.toggles.thinking || adapter.capabilities.toggles.search) {
         await applyTogglesWithLog({ page, adapter, toggles, stage: '发送前复核', log: this.log });
       }
       await adapter.send(page, params.prompt, { log: (m) => this.log('task', m) });
       await waitForSendConfirm(capture, timeouts.sendingMs);
-      this.log('task', '已发送（观测到 chat/completion 请求）');
+      this.log('task', '已发送（观测到答复流请求）');
       this.#throwIfCanceled(task);
 
       // ── streaming：流为主，DOM 兜底 ──

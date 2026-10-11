@@ -17,16 +17,31 @@ export class EngineError extends Error {
   }
 }
 
-/** 能力声明默认值（未声明 = 不具备）——调度与取件据此分支。 */
+/**
+ * 能力声明默认值（未声明 = 不具备）——调度与取件据此分支。
+ * `toggles` 按子键声明（b6 起；接口见 `docs/design/modules/adapters.md` §2），归一化见 `normalizeToggles`。
+ */
 export const DEFAULT_CAPABILITIES = Object.freeze({
   newChat: false,
   upload: false,
   downloadCapture: false,
   codeBlockExtract: false,
   streamCapture: false,
-  toggles: false,
+  toggles: Object.freeze({ thinking: false, search: false }),
   requestPayloadCapture: false,
 });
+
+/**
+ * 开关能力位归一化（能力声明唯一权威处的一次转换——引擎 / 界面 / 测试三面同源）。
+ * 兼容旧值：`true` ⇒ 两子键均支持；`false` / 缺省 / 非法（非布尔非对象）⇒ 两子键均不支持；对象 ⇒ 逐键取真。
+ */
+export function normalizeToggles(value) {
+  if (value === true) return { thinking: true, search: true };
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return { thinking: !!value.thinking, search: !!value.search };
+  }
+  return { thinking: false, search: false };
+}
 
 const REQUIRED_FUNCTIONS = [
   ['checkLogin', 'checkLogin(page)'],
@@ -35,7 +50,7 @@ const REQUIRED_FUNCTIONS = [
 ];
 
 /**
- * 校验并规整适配器定义（能力项按默认值补齐）。
+ * 校验并规整适配器定义（能力项按默认值补齐；`capabilities.toggles` 归一化为子键对象）。
  * @param {object} spec 适配器对象
  * @returns {object} 规整后的适配器对象
  */
@@ -60,9 +75,11 @@ export function defineAdapter(spec) {
   if (problems.length) {
     throw new Error(`适配器定义非法（${spec.id ?? '未知平台'}）：${problems.join('；')}`);
   }
+  const capabilities = { ...DEFAULT_CAPABILITIES, ...(spec.capabilities ?? {}) };
+  capabilities.toggles = normalizeToggles(capabilities.toggles);
   return {
     ...spec,
-    capabilities: { ...DEFAULT_CAPABILITIES, ...(spec.capabilities ?? {}) },
+    capabilities,
     selectors: { ...(spec.selectors ?? {}) },
   };
 }

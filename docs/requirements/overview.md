@@ -230,10 +230,10 @@
 
 **验收**
 
-- AC-R8-1（命令可验）：配置 `toggles.thinking=true, toggles.search=false` 派单一次 → 捕获的 `chat/completion` 请求载荷满足 `thinking_enabled=true` 且 `search_enabled=false`。
+- AC-R8-1（命令可验）：配置 `toggles.thinking=true, toggles.search=false` 派单一次 → 捕获的 `chat/completion` 请求载荷满足 `thinking_enabled=true` 且 `search_enabled=false`；**核对范围 = 受支持子键**（b6 起）：`ok` 按受支持子键全等判定，`payload` 未捕获 ⇒ `ok` 为 `null`（合法路径，不伪装绿）。
 - AC-R8-2（操作可证伪）：把某外包工开关改为另一组值 → 再派一单 → 载荷两键随之变化；界面与日志可见应用动作。
 - AC-R8-3（命令可验）：开关元素缺失场景（选择器失效）→ 任务走 `E_SELECTOR_MISSING` 处置路径，不发送。
-- **无开关能力的平台**（适配器 `capabilities.toggles = false`）⇒ **跳过开关子步**（配置值保留、不报错）；该平台的 AC-R8-1 / AC-R8-2 / AC-R8-3 不适用（口径同 `docs/design/modules/adapters.md`「外包工开关的应用与核对」末行）。
+- **无任一受支持子键的平台**（适配器 `capabilities.toggles` 两子键皆不支持）⇒ 跳过开关子步，其 AC-R8-1 / AC-R8-2 / AC-R8-3 不适用；**部分子键受支持**的平台（如 Kimi 的 search）按受支持子键执行——不受支持子键跳过、不报错、不核对（口径同 `docs/design/modules/adapters.md`「外包工开关的应用与核对」末行）。
 
 **依赖**：R3 的适配器与发送链路；平台开关能力（DeepSeek 已实测：`div.ds-toggle-button` + `aria` 可读可设、请求载荷 `thinking_enabled` / `search_enabled` 为权威读法）；b2 界面（开关的呈现位置）。
 
@@ -279,7 +279,7 @@
 - 不改 MCP 六件套契约（不加参数、不改返回形状、manifest 不加字段）。
 - 不改工单语义（答复仍取「最新一条带结束标记的助手消息」；取件三层不变）。
 - 每外包工并发仍为 1；不做跨外包工会话共享；不做跨引擎重启持久化；不做上下文压缩 / 摘要；不做服务端会话有效性预检。
-- 本批无设置界面开关（手改 `config.json`）。
+- b5 无设置界面开关（手改 `config.json`）；**b6 起**设置界面提供「会话复用（全局）」块（复用开关 + 空闲 TTL + 单会话任务上限）。
 
 **验收**
 

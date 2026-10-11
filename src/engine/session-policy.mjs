@@ -40,13 +40,13 @@ export class SessionPolicy {
    *
    * @param {object} params
    * @param {string} params.workerId
-   * @param {number} params.now 取时点（可注入，供单测判定 TTL 边界）
+   * @param {number} params.now 取时点（缺省 = `Date.now()`；可注入，供单测判定 TTL 边界）
    * @param {object} [params.config] 会话配置（缺省 / 缺键回落 `DEFAULT_SESSION_CONFIG`）
    * @param {unknown} params.page 当前页面（仅取身份作 `pageRef` 比对）
    * @returns {{reuse: boolean, reason: string, taskCount: number, idleMs: number|null}}
    *          reason 域 = disabled | absent | replaced | error | canceled | ttl | count | reuse
    */
-  decide({ workerId, now, config, page } = {}) {
+  decide({ workerId, now = Date.now(), config, page } = {}) {
     const cfg = { ...DEFAULT_SESSION_CONFIG, ...(config ?? {}) };
     if (cfg.reuse === false) {
       return { reuse: false, reason: 'disabled', taskCount: 0, idleMs: null };

@@ -19,15 +19,27 @@
   </header>
 
   <main class="panels">
-    <!-- 外包工（T2–T8）：行结构在 renderer-workers.js 构建
-         —— [data-worker-id] 行内 data-field=name|enabled|status|checked · data-toggle=thinking|search · data-action=up|down|delete|check -->
+    <!-- 外包工（T2–T8）：行结构在 renderer-workers.js 构建 —— [data-worker-id] 行内 data-field=name|enabled|status|checked
+         · data-toggle=thinking|search（按快照 platforms[].toggles 子键门控）· data-field=toggles-unsupported（不受支持子键提示行）
+         · data-action=up|down|delete|check；会话复用块在行列表之前（b6/T7） -->
     <section class="panel" data-page-panel="workers" hidden>
       <div class="panel-head">
         <h2>外包工</h2>
         <button type="button" data-action="add-worker">新增外包工</button>
       </div>
+      <!-- 会话复用（b6/T7）：全局 session 三键（写入 = 补丁操作 session.set；呈现与接线在 renderer-session.js） -->
+      <section class="session-policy" data-field="session-policy">
+        <h3>会话复用（全局）</h3>
+        <div class="session-controls">
+          <label class="switch"><input type="checkbox" data-field="session-reuse" /><span>复用会话</span></label>
+          <label class="switch"><input type="number" min="1" data-field="session-ttl-ms" /><span>空闲 TTL（毫秒）</span></label>
+          <label class="switch"><input type="number" min="1" max="1000" data-field="session-max-tasks" /><span>单会话任务上限</span></label>
+        </div>
+        <p class="hint" data-field="session-error" hidden></p>
+        <p class="hint">复用 = 相邻任务共享上下文（省去每单重新开窗）；出错 / 超时 / 取消后自动换新会话。改动即时落盘。</p>
+      </section>
       <p class="hint">主包AI 派单可指定外包工名；仅列表内已启用的外包工可被指定。</p>
-      <p class="hint">每行的「深度思考 / 联网搜索」开关随外包工登记（改动即时落盘），派单时自动应用。</p>
+      <p class="hint">每行按平台支持的子键呈现「深度思考 / 联网搜索」开关（改动即时落盘），派单时自动应用；不受支持的子键不显示开关，以行内提示明示。</p>
       <p class="hint login-guide" data-field="login-guide" hidden></p>
       <ul class="worker-list" data-worker-list></ul>
       <p class="empty" data-field="workers-empty" hidden>暂无外包工，点击「新增外包工」开始。</p>
@@ -112,5 +124,6 @@
 
   <script src="renderer.js"></script>
   <script src="renderer-workers.js"></script>
+  <script src="renderer-session.js"></script>
 </body>
 </html>

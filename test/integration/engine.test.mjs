@@ -5,7 +5,9 @@
  * 覆盖（不依赖平台登录；本地 fixture 页）：
  *   ① 本地 blob 页 ⇒ 下载事件触发 → CDP 自动落盘到暂存区 → 归属移入 `files/` + 命名净化/重名；
  *   ② 同一 profileDir 可连续两次 launch（复用成功）；
- *   ③ 开关应用失败：fixture 页无 `div.ds-toggle-button` ⇒ 判 `E_SELECTOR_MISSING` 且**未执行发送**（AC-R8-3）。
+ *   ③ 开关应用失败：fixture 页无 `div.ds-toggle-button` ⇒ 判 `E_SELECTOR_MISSING` 且**未执行发送**（AC-R8-3）；
+ *   ④ `capabilities.newChat === false` 守卫：不判会话 / 不记账，任务照常完成（b6 #28③）；
+ *   ⑤ 开关按子键执行：部分支持（仅 search）⇒ 只对受支持子键下控件操作、`result.toggles` 含 checked / unsupported（b6 T6）。
  *
  * 会话复用场景（J1–J5 / J8 / J9）在 `engine.session.test.mjs`（同命令第二个文件）；
  * 公共辅助件（临时根 / 浏览器装配 / fixture 服务器）抽在 `engine-helpers.mjs`。
@@ -194,5 +196,85 @@ test('开关应用失败：fixture 页无 div.ds-toggle-button ⇒ E_SELECTOR_MI
   } finally {
     await browser.closeAll().catch(() => {});
     await closeFixtureServer(server);
+  }
+});
+
+/** 两新例共用样板：临时根 + fixture 服务器 + 会话页适配器（真实 DeepSeek 机械 + 本地流通道）+ 装配 */
+async function fixtureHarness({ name, capabilities, applyToggles }) {
+  const root = freshRoot(name);
+  const { server, state, base } = await startFixtureServer();
+  const logs = [];
+  const adapter = defineAdapter({
+    ...deepseek,
+    id: 'fixture',
+    platformName: 'Fixture',
+    url: `${base}/session`,
+    capabilities: { ...deepseek.capabilities, upload: false, downloadCapture: false, ...capabilities },
+    async openSession(page) {
+      state.openSessions += 1;
+      return { via: 'stub' };
+    },
+    ...(applyToggles ? { applyToggles } : {}),
+    stream: {
+      match: (url) => url.startsWith(`${base}/api/`),
+      parse: (body) => ({ text: String(body).trim(), thinking: '', finished: true }),
+    },
+  });
+  registerAdapter(adapter);
+  const browser = makeBrowser(path.join(root, 'userdata'), logs);
+  browsers.push(browser);
+  const runner = new TaskRunner({ browser, log: (scope, m) => logs.push(`[${scope}] ${m}`), emit: () => {} });
+  const outboxDir = path.join(root, 'outbox');
+  fs.mkdirSync(outboxDir, { recursive: true });
+  return { server, state, logs, browser, runner, outboxDir };
+}
+
+const runFixtureTask = ({ runner, outboxDir, taskId, toggles }) =>
+  runner.run({
+    taskId,
+    worker: { id: 'w-fx', name: 'Fixture', platform: 'fixture' },
+    prompt: 'fixture 任务（b6 引擎面新例）',
+    files: [],
+    outboxDir,
+    toggles,
+  });
+
+test('会话守卫：capabilities.newChat === false ⇒ 不判会话 / 不记会话，任务照常完成（b6 #28③）', { timeout: 120000 }, async () => {
+  const h = await fixtureHarness({ name: 'newchat-off', capabilities: { toggles: false, requestPayloadCapture: false, newChat: false } });
+  try {
+    const result = await runFixtureTask({ runner: h.runner, outboxDir: h.outboxDir, taskId: 'engine-newchat-off-1', toggles: {} });
+    assert.equal(result.error, null, `任务应照常完成：${JSON.stringify(result.error)}`);
+    assert.equal(h.state.openSessions, 0, 'newChat:false ⇒ 不调 openSession');
+    const text = h.logs.join('\n');
+    assert.ok(!/新会话（/.test(text) && !/复用会话（/.test(text), '守卫应跳过会话判定与登记日志');
+    assert.equal(h.runner.sessionPolicy.units.size, 0, 'newChat:false ⇒ 不记账（finally 守卫）');
+  } finally {
+    await h.browser.closeAll().catch(() => {});
+    await closeFixtureServer(h.server);
+  }
+});
+
+test('开关按子键执行：部分支持（仅 search）⇒ 只对受支持子键下控件操作、回报含 checked / unsupported（b6 T6）', { timeout: 120000 }, async () => {
+  const applyCalls = [];
+  const h = await fixtureHarness({
+    name: 'toggles-subkey',
+    capabilities: { toggles: { thinking: false, search: true }, requestPayloadCapture: false },
+    applyToggles: async (page, toggles) => {
+      applyCalls.push(toggles);
+      return { ok: true, configured: { ...toggles }, page: { ...toggles } };
+    },
+  });
+  try {
+    const result = await runFixtureTask({ runner: h.runner, outboxDir: h.outboxDir, taskId: 'engine-toggles-subkey-1', toggles: { thinking: true, search: false } });
+    assert.equal(result.error, null, `任务应照常完成：${JSON.stringify(result.error)}`);
+    assert.deepEqual(applyCalls, [{ search: false }, { search: false }], 'applyToggles 实收 = 受支持子键子集（无 thinking 键；应用 + 发送前复核各一次）');
+    assert.deepEqual(
+      result.toggles,
+      { configured: { thinking: true, search: false }, payload: null, ok: null, checked: ['search'], unsupported: ['thinking'] },
+      'result.toggles 应含 checked / unsupported；payload 未捕获 ⇒ ok 为 null（不伪装绿）',
+    );
+  } finally {
+    await h.browser.closeAll().catch(() => {});
+    await closeFixtureServer(h.server);
   }
 });

@@ -1,7 +1,8 @@
 /**
  * `verify:settings` 场景组 · 接入指引 / 一键导出 / 关于页（h 两段 · i · j）
  *
- * h① 服务已启动：显示地址 == `runtime.json.url`、两形态复制 == 实际地址（AC-R7-2 界面侧 / AC-R9-1 / AC-R9-2）；
+ * h① 服务已启动：显示地址 == `runtime.json.url`、两形态复制 == 实际地址（AC-R7-2 界面侧 / AC-R9-1 / AC-R9-2）
+ *   + T1（b6）app.log 读数：「加载完成，补推一次全量快照」（`did-finish-load` 补推）；
  * h①·顺延段 期望端口被占 ⇒ 显示实际端口 + 「宿主配置需更新」提示（批次档 §2 评审修复 ⑦）；
  * h② 服务未启动（占满期望端口 +1..+120 ⇒ 无 runtime.json）：「未启动 + 原因 / 建议」、复制/导出禁用、日志同示；
  * i 一键导出两文件、端口 = 实际端口、重复导出覆盖刷新不新增副本（R9·F9.6）；
@@ -46,6 +47,10 @@ test('h①+i+j：实际地址显示 / 两形态复制 / 一键导出覆盖刷新
     // 窗口首次快照可能早于 MCP 就绪（显示「未启动」），服务就绪后经变更广播刷新 ⇒ 有界等待「运行中」
     const running = await session.waitDom(`document.querySelector('[data-field="service-status"]').textContent === '运行中' ? 'y' : null`, 20000);
     assert.equal(running, 'y', '接入指引应在服务就绪后显示「运行中」');
+    // T1（b6）：页面加载完成 ⇒ 补推一次全量快照（启动期竞态兜底）—— app.log 有界等待读数
+    const pushed = await waitFor(() => (readAppLog(userData).includes('加载完成，补推一次全量快照') ? true : null), 15000, 300);
+    assert.ok(pushed, 'app.log 应含「加载完成，补推一次全量快照」（did-finish-load 补推）');
+    console.log('[verify:settings·h①·T1 读数] app.log 命中「设置窗口：加载完成，补推一次全量快照（启动期竞态兜底）」');
     const guide = await session.evalJson(`({
       status: document.querySelector('[data-field="service-status"]').textContent,
       url: document.querySelector('[data-field="mcp-url"]').textContent,

@@ -1,5 +1,5 @@
 /**
- * b2 单元测试 · 配置变更纯函数面（patches：七操作合法与非法）
+ * b2 单元测试 · 配置变更纯函数面（patches：八操作合法与非法）
  * 设计权威：docs/design/modules/settings-app.md §2 / §5 / §7；冻结接口 = 批次档 b2 §2。
  * 由入口 `b2-settings-ui.units.mjs` 聚合执行。
  */
@@ -9,10 +9,10 @@ import { applyPatch, PATCH_OPS, PLATFORM_CHOICES } from '../../src/settings/patc
 import { baseConfig as base } from './b2-settings-ui.units.fixtures.mjs';
 
 // ---------------------------------------------------------------------------
-// 七操作：清单 / 合法 / 非法（拒绝且不改传入配置）
+// 八操作：清单 / 合法 / 非法（拒绝且不改传入配置）
 // ---------------------------------------------------------------------------
 
-test('patches：操作清单 = 冻结的七项；平台清单 = deepseek 可 / kimi 可（b3 落地）', () => {
+test('patches：操作清单 = 冻结的八项；平台清单 = deepseek 可 / kimi 可（b3 落地；b6 增 session.set）', () => {
   assert.deepEqual(PATCH_OPS, [
     'worker.add',
     'worker.remove',
@@ -21,6 +21,7 @@ test('patches：操作清单 = 冻结的七项；平台清单 = deepseek 可 / k
     'worker.setEnabled',
     'worker.setToggles',
     'outbox.set',
+    'session.set',
   ]);
   assert.deepEqual(
     PLATFORM_CHOICES.map((p) => `${p.id}:${p.available ? '可' : '待支持'}`),

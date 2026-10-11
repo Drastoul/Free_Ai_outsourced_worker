@@ -3,6 +3,7 @@
 // 冻结接口（批次档 b2 §2）——快照字段 ↔ 渲染层 DOM 契约：service.url↔[data-field=mcp-url] ·
 //   service.sseUrl↔sse-url · version↔version · outbox.actual↔outbox-actual · outbox.note↔outbox-note ·
 //   exportDir↔export-dir · logsDir↔logs-dir · workers[].toggles↔[data-toggle=thinking|search]（配置值，随外包工）；
+//   platforms[].toggles = [data-toggle] 的子键门控来源（b6/T3）· session.*↔[data-field=session-reuse|session-ttl-ms|session-max-tasks]（b6/T7）；
 //   fragments.* = 一键复制的两形态文本（生成器权威）。
 // 单写者 = 主进程：渲染层只经 IPC（preload → window.mjs 转发）调用本服务，不直接触达文件系统。
 
@@ -11,7 +12,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveOutboxDir, dirHasWriteAccess } from '../shared/outbox.mjs';
-import { applyPatch, PATCH_OPS, PLATFORM_CHOICES } from './patches.mjs';
+import { applyPatch, PATCH_OPS } from './patches.mjs';
+import { buildPlatforms } from './platform-capabilities.mjs';
+import { buildSessionSnapshot } from './snapshot-session.mjs';
 import { buildFragments, stringifyFragment } from './fragments.mjs';
 import { exportFragments, exportDirFor } from './export.mjs';
 
@@ -86,7 +89,8 @@ export function createSettingsService({
         ...w,
         toggles: config.current.workers.find((x) => x.id === w.id)?.toggles ?? { thinking: false, search: false },
       })),
-      platforms: PLATFORM_CHOICES,
+      platforms: buildPlatforms(),
+      session: buildSessionSnapshot(cfg.session),
       outbox: {
         configured: outbox.configured,
         actual: outbox.dir,

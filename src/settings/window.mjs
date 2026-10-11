@@ -126,6 +126,11 @@ export function createSettingsWindow({ service, log }) {
       }
     });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    // 启动期竞态兜底（b6/T1）：页面加载完成 ⇒ 补推一次全量快照（此后的 webContents.send 页面必达；幂等）
+    win.webContents.once('did-finish-load', () => {
+      log.info('设置窗口：加载完成，补推一次全量快照（启动期竞态兜底）');
+      void service.emitChanged('窗口加载完成');
+    });
     const loadOptions = initialPage ? { query: { page: String(initialPage) } } : undefined;
     win
       .loadFile(PAGE_PATH, loadOptions)

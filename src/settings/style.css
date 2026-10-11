@@ -126,4 +126,11 @@ code {
 .platform { display: inline-flex; align-items: center; gap: 6px; }
 .platform-note { color: var(--muted); font-size: 12px; }
 
+/* 会话复用块（b6/T7；复用既有 .switch / .hint）；非法态 = 行内提示（红） */
+.session-policy { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; }
+.session-policy h3 { margin: 0 0 6px; font-size: 14px; }
+.session-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.session-controls input[type="number"] { width: 96px; font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.session-policy [data-field="session-error"] { color: var(--danger); }
+
 [hidden] { display: none !important; }

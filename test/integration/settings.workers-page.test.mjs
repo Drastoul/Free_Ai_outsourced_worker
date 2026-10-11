@@ -4,8 +4,10 @@
  * a 窗口与四页签（含关闭窗口后应用仍存活—/healthz 200）· b 新增 ⇒ config + `list_workers` / `/healthz` 双读（AC-R5-1）·
  * c 删除 + 二次确认（取消保留 / 确认移除；AC-R5-2）· d 调序 ⇒ config 与 `/healthz` 顺序随动（AC-R5-3）·
  * e 改名 + 旧名 `E_WORKER_UNKNOWN` 且不建任务（AC-R5-4）· f 开关 ⇒ config 与快照双读 + DOM 回显（AC-R8-2 界面侧，
- * 快照读面 = service.mjs 曾出缺陷处）· g 交付目录两段：非法拒绝且不落配置 / 合法落盘且界面显示实际路径（AC-R5-6 界面侧）·
- * h Kimi 可选且经 `worker.add` 落盘（b3 T3；平台行已可选，不再灰显）。
+ * 快照读面 = service.mjs 曾出缺陷处）· f3 会话复用块（b6/T7）：快照三键 / 控件四锚点 / 非法回滚 / 合法写双读 ·
+ * g 交付目录两段：非法拒绝且不落配置 / 合法落盘且界面显示实际路径（AC-R5-6 界面侧）·
+ * h Kimi 可选且经 `worker.add` 落盘（b3 T3；平台行已可选，不再灰显）· h·b6（T3）Kimi 行按子键门控（恰 1 个
+ * `[data-toggle]` = search、「深度思考」行内提示、快照 `platforms[].toggles` 子键对象）。
  *
  * 驱动 = `settings.session.mjs`（`_electron` 主路径，CDP 备选）；读数工具 = `settings.driver.mjs`。
  */
@@ -195,6 +197,33 @@ test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录 + Kim
     );
     console.log('[verify:settings·f2 读数] enabled 停用/启用 ⇒ config=false/true + 徽标=disabled/ready');
 
+    // ---- f3：会话复用块（b6/T7）—— 快照三键 / 控件四锚点 / 非法回滚 / 合法写双读 ----
+    const snapSession = await session.evalJson(`window.fo.getSnapshot().then(s => s.session)`);
+    assert.deepEqual(snapSession, { reuse: true, ttlMs: 600000, maxTasksPerSession: 5 }, '快照 session 三键 == 配置默认值');
+    const sessCtrl = await session.evalJson(`({ policy: !!document.querySelector('[data-field="session-policy"]'),
+      reuse: document.querySelector('[data-field="session-reuse"]').checked,
+      ttl: document.querySelector('[data-field="session-ttl-ms"]').value, maxTasks: document.querySelector('[data-field="session-max-tasks"]').value,
+      innerToggles: document.querySelectorAll('[data-field="session-policy"] [data-toggle]').length })`);
+    assert.equal(sessCtrl.policy, true, '会话块容器锚点存在（冻结接口五锚点之一）');
+    assert.equal(sessCtrl.reuse, true, '复用开关勾选 == 快照');
+    assert.equal(sessCtrl.ttl, '600000', '空闲 TTL 值 == 快照');
+    assert.equal(sessCtrl.maxTasks, '5', '单会话任务上限值 == 快照');
+    assert.equal(sessCtrl.innerToggles, 0, '会话块内不得出现行级 [data-toggle] 锚点（与行级隔离）');
+    await session.eval(`(() => { const i = document.querySelector('[data-field="session-ttl-ms"]'); i.value = '-1'; i.dispatchEvent(new Event('change')); })()`);
+    assert.equal(await session.waitDom(`document.querySelector('[data-field="session-ttl-ms"]').value === '600000' ? 'y' : null`), 'y', '非法输入应回滚为快照值');
+    assert.equal(await session.eval(`document.querySelector('[data-field="session-error"]').hidden`), false, '非法输入应出现行内提示');
+    assert.equal((readConfig(userData).session || {}).ttlMs ?? 600000, 600000, '非法输入不得落盘');
+    const sessPatched = await session.evalJson(`window.fo.patch({ op: 'session.set', reuse: false })`);
+    assert.deepEqual(sessPatched, { ok: true }, '合法写应被接受');
+    assert.ok(await waitConfig(userData, (c) => c.session && c.session.reuse === false), '合法写应落盘');
+    const reuseAfter = await session.evalJson(`window.fo.getSnapshot().then(s => s.session.reuse)`);
+    assert.equal(reuseAfter, false, '快照双读一致（config 与快照同值）');
+    const badSessionOp = await session.evalJson(`window.fo.patch({ op: 'session.set', ttlMs: -1 })`);
+    assert.equal(badSessionOp.ok, false, '直调非法 op 应被拒');
+    assert.match(badSessionOp.error, /ttlMs/, `拒绝原因应明示：${JSON.stringify(badSessionOp)}`);
+    assert.equal((readConfig(userData).session || {}).ttlMs ?? 600000, 600000, '非法 op 不得落盘');
+    console.log(`[verify:settings·f3 读数] 快照=${JSON.stringify(snapSession)} · 控件=${JSON.stringify(sessCtrl)} · 非法输入⇒值回滚+错误行可见+未落盘 · 合法写⇒config.reuse=${readConfig(userData).session.reuse} 快照.reuse=${reuseAfter} · 直调非法⇒ok=${badSessionOp.ok}（${badSessionOp.error}）`);
+
     // ---- g：交付目录两段（AC-R5-6 界面侧）----
     fs.writeFileSync(path.join(userData, 'blocker'), 'file', 'utf8'); // 父路径是文件 ⇒ 该目录不可用
     const badDir = path.join(userData, 'blocker', 'sub');
@@ -235,6 +264,15 @@ test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录 + Kim
     const hzK = await healthz(rt.port);
     assert.ok(hzK.workers.some((w) => w.id === kimiWorker.id), '/healthz 应可见 Kimi 条目');
     console.log(`[verify:settings·h 读数] Kimi 落盘=${kimiWorker.id}/${kimiWorker.name} platform=${kimiWorker.platform} toggles=${JSON.stringify(kimiWorker.toggles)} · list_workers=可见 · /healthz=可见`);
+    // ---- h·b6（T3）：Kimi 行按子键门控 —— 恰 1 个 [data-toggle]（search）+ 不受支持子键行内提示 + 快照子键对象 ----
+    const kimiGated = await session.waitDom(`(() => { const row = document.querySelector('[data-worker-id="${kimiWorker.id}"]'); if (!row) return null; const t = row.querySelectorAll('[data-toggle]'); return t.length === 1 && t[0].getAttribute('data-toggle') === 'search' ? 'y' : null; })()`);
+    assert.equal(kimiGated, 'y', 'Kimi 行应恰 1 个开关（search；thinking 无控件）');
+    const kimiUnsupported = await session.evalJson(`(() => { const n = document.querySelector('[data-worker-id="${kimiWorker.id}"] [data-field="toggles-unsupported"]'); return n ? n.textContent : null; })()`);
+    assert.ok(kimiUnsupported && kimiUnsupported.includes('深度思考'), `不受支持子键应有行内提示：${kimiUnsupported}`);
+    const platToggles = await session.evalJson(`window.fo.getSnapshot().then(s => Object.fromEntries(s.platforms.map(p => [p.id, p.toggles])))`);
+    assert.deepEqual(platToggles.deepseek, { thinking: true, search: true }, '快照 platforms[].toggles：DeepSeek 两子键支持');
+    assert.deepEqual(platToggles.kimi, { thinking: false, search: true }, '快照 platforms[].toggles：Kimi 仅 search');
+    console.log(`[verify:settings·h·b6 读数] Kimi 行 [data-toggle] 恰 1=[search] · 提示行=${kimiUnsupported} · platforms.toggles=${JSON.stringify(platToggles)}`);
     // 清理：删除该条目（保持与既有断言无耦合）
     await session.click(`[data-worker-id="${kimiWorker.id}"] [data-action="delete"]`);
     await session.click('[data-action="confirm-yes"]');

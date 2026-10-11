@@ -3,14 +3,14 @@
  *   · `markAssistantBaseline`：`send()` 前记「助手回合基线」（b5 本单锚定——复用会话时页面留存上一单回合）；
  *   · `collectDomAnswer`：兜底通道——只拼接**基线之后新回合**内的全部 markdown 块（探针 2 只取最后一块会漏内容）；
  *   · `clickDownloadButtons`：取件层① 的触发——点最后一个助手回合里代码块的「下载」按钮（落盘由 CDP 自动落盘承担）。
- * 三者都不抛错（DOM 只是兜底、下载只是三层之一）。
+ * 三者都不抛错（DOM 只是兜底、下载只是三层之一）；`markAssistantBaseline` 失败记一行日志（b6「基线打标失败不静默」——仍返回 0）。
  */
 const DOM_TAG = 'data-fo';
 const BASELINE_ATTR = 'data-fo-dom-baseline';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 发送前记「助手回合基线」：给当前全部 markdown 块及其回合容器打标（b5 起 `collect` 只认未打标的新回合） */
-export async function markAssistantBaseline(page) {
+/** 发送前记「助手回合基线」：给当前全部 markdown 块及其回合容器打标（b5 起 `collect` 只认未打标的新回合）；失败 ⇒ 记一行日志、仍返回 0（b6） */
+export async function markAssistantBaseline(page, { log } = {}) {
   return await page
     .evaluate((attr) => {
       const blocks = [...document.querySelectorAll('[class*="ds-markdown"]')];
@@ -21,7 +21,11 @@ export async function markAssistantBaseline(page) {
       }
       return blocks.length;
     }, BASELINE_ATTR)
-    .catch(() => 0);
+    .catch((e) => {
+      // 打标失败不静默（b6）：DOM 兜底可能把上一单回合计入，日志为事后取证线索；不升级为任务失败（仍返回 0）
+      log?.(`助手回合基线打标失败：${String(e?.message ?? e).slice(0, 120)}`);
+      return 0;
+    });
 }
 
 /** DOM 兜底：拼接基线之后新回合内的全部 markdown 块（无新回合 ⇒ 空串；上层据此判 `E_NO_RESPONSE`，不静默交付旧答复） */

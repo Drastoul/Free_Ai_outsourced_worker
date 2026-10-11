@@ -1,10 +1,10 @@
 /**
  * 答复采集（`docs/design/modules/adapters.md`「收答复主通道」「DOM 兜底通道」）：
- *   · 流捕获 = 监听本任务 `chat/completion` 请求 / 响应；请求体交 `adapter.requestPayload.toggles` 读开关载荷；
+ *   · 流捕获 = 监听本任务的答复流请求 / 响应（平台专属协议名见各适配器模块）；请求体交 `adapter.requestPayload.toggles` 读开关载荷；
  *   · 收答复 = 以流为主（流内 FINISHED 结束标记判定完成），未捕获到流 ⇒ DOM 兜底（2s × 3 次稳定）；
  *   · 取消由调用方的 `isCanceled()` 注入（本模块不持有任务状态）。
  */
-import { EngineError } from './adapters/base.mjs';
+import { EngineError, normalizeToggles } from './adapters/base.mjs';
 import { sleep } from './util.mjs';
 
 /** 挂流监听：请求（含开关载荷）、响应体（SSE 全文） */
@@ -52,14 +52,14 @@ export function detachStreamCapture(page, capture) {
   }
 }
 
-/** 发送确认：发送后是否观测到本任务 `chat/completion` 请求（未确认 ⇒ E_SEND_FAILED） */
+/** 发送确认：发送后是否观测到本任务的答复流请求（未确认 ⇒ E_SEND_FAILED） */
 export async function waitForSendConfirm(capture, budgetMs) {
   const deadline = Date.now() + budgetMs;
   while (Date.now() < deadline) {
     if (capture.requestSeen) return true;
     await sleep(200);
   }
-  throw new EngineError('E_SEND_FAILED', `发送未确认：${budgetMs}ms 内未观测到 chat/completion 请求`);
+  throw new EngineError('E_SEND_FAILED', `发送未确认：${budgetMs}ms 内未观测到答复流请求`);
 }
 
 /**
@@ -126,41 +126,48 @@ export async function collectAnswer(page, adapter, capture, timeouts, { isCancel
   return { transport, text, thinking, note };
 }
 
-/** 开关核对回报形状：`{configured, payload, ok}`（`docs/design/modules/adapters.md` §3.8） */
+/** 开关核对回报形状：`{configured, payload, ok, checked, unsupported}`（`docs/design/modules/adapters.md` §3.8；`ok` 只比**受支持子键**；未捕获载荷 / 无受支持子键 ⇒ `null`，不伪装绿） */
 export function buildTogglesReport(adapter, toggles, capture) {
   const configured = { thinking: !!(toggles?.thinking), search: !!(toggles?.search) };
+  const supported = normalizeToggles(adapter?.capabilities?.toggles);
+  const checked = ['thinking', 'search'].filter((key) => supported[key]);
+  const unsupported = ['thinking', 'search'].filter((key) => !supported[key]);
   const payload = adapter?.capabilities?.requestPayloadCapture ? (capture?.payload ?? null) : null;
-  const ok = payload
-    ? payload.thinking_enabled === configured.thinking && payload.search_enabled === configured.search
-    : null;
-  return { configured, payload, ok };
+  const ok = payload && checked.length ? checked.every((key) => payload[`${key}_enabled`] === configured[key]) : null;
+  return { configured, payload, ok, checked, unsupported };
 }
 
-/** 开关值的日志化展示（configured 用 thinking/search，payload 用 thinking_enabled/search_enabled） */
+/** 开关值的日志化展示（configured 用 thinking/search，payload 用 thinking_enabled/search_enabled；只展示在场键） */
 export function fmtToggles(value) {
   if (!value) return '未知';
+  const parts = [];
   const thinking = value.thinking ?? value.thinking_enabled;
   const search = value.search ?? value.search_enabled;
-  return `{thinking:${thinking}, search:${search}}`;
+  if (thinking !== undefined) parts.push(`thinking:${thinking}`);
+  if (search !== undefined) parts.push(`search:${search}`);
+  return `{${parts.join(', ')}}`;
 }
 
 /**
  * 应用 / 复核外包工开关并记一行「目标值 / 实际值 / 复核结果」（AC-R8-2 日志侧）。
- * 失败（元素缺失 / 状态不符）⇒ 原样抛出 `E_SELECTOR_MISSING`（调用方中止，不发送）。
+ * b6 起只对**受支持子键的子集**下控件操作与复核（`capabilities.toggles` 归一化后逐键取真）。
+ * 失败（元素缺失 / 状态不符）⇒ 原样抛出 `E_SELECTOR_MISSING`（调用方中止，不发送）；无受支持子键 ⇒ 不触及页面（返回 null；调用方守卫已跳过本步）。
  * @param {{page:object, adapter:object, toggles:object, stage:string, log?:Function}} o
  */
 export async function applyTogglesWithLog({ page, adapter, toggles, stage, log = () => {} } = {}) {
+  const supported = normalizeToggles(adapter?.capabilities?.toggles);
+  const wanted = { thinking: !!(toggles?.thinking), search: !!(toggles?.search) };
+  const subset = {};
+  for (const key of ['thinking', 'search']) if (supported[key]) subset[key] = wanted[key];
+  if (!Object.keys(subset).length) return null;
   try {
-    const applied = await adapter.applyToggles(page, toggles, { log: (m) => log('task', m) });
-    const configured = applied?.configured ?? { thinking: !!(toggles?.thinking), search: !!(toggles?.search) };
+    const applied = await adapter.applyToggles(page, subset, { log: (m) => log('task', m) });
     const actual = applied?.page ?? null;
-    const ok = actual
-      ? actual.thinking === configured.thinking && actual.search === configured.search
-      : applied?.ok !== false;
-    log('task', `开关${stage} 目标=${fmtToggles(configured)} 实际=${actual ? fmtToggles(actual) : '未知'} 复核=${ok ? '一致' : '不一致'}`);
+    const ok = actual ? Object.entries(subset).every(([key, value]) => actual[key] === value) : applied?.ok !== false;
+    log('task', `开关${stage} 目标=${fmtToggles(subset)} 实际=${actual ? fmtToggles(actual) : '未知'} 复核=${ok ? '一致' : '不一致'}`);
     return applied;
   } catch (e) {
-    log('task', `开关${stage}失败 目标=${fmtToggles(toggles)} 错误=${e?.code ?? ''} ${e?.message ?? e}`);
+    log('task', `开关${stage}失败 目标=${fmtToggles(subset)} 错误=${e?.code ?? ''} ${e?.message ?? e}`);
     throw e;
   }
 }

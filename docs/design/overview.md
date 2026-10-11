@@ -117,7 +117,7 @@
 4. 应用该外包工开关（`toggles`；失败 ⇒ `E_SELECTOR_MISSING`，不发送）→ 有附件则上传（`setInputFiles`）→ 发送任务文本（聚焦 + insertText + Enter）。
 5. 收答复：主通道拦截平台流式响应体解析全文，以流内结束标记判定完成；DOM 抓取为兜底（协议见 `modules/adapters.md`）。
 6. 取件三层：下载捕获（CDP 自动落盘）/ 回复内代码块提取 / 回复全文落盘（规则见 `modules/outbox.md`）。
-7. 引擎把产物写入 `<outbox>/<taskId>/`，返回结果清单（`delivery` + `toggles: {configured, payload, ok}`）→ 主进程据此写 manifest 终态（manifest 单一写者；字段语义见 `docs/design/modules/outbox.md`「manifest.json 与交付原子性」，捕获与核对机制见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
+7. 引擎把产物写入 `<outbox>/<taskId>/`，返回结果清单（`delivery` + `toggles: {configured, payload, ok, checked, unsupported}`——`ok` 自 b6 起按**受支持子键**全等判定）→ 主进程据此写 manifest 终态（manifest 单一写者；字段语义见 `docs/design/modules/outbox.md`「manifest.json 与交付原子性」，捕获与核对机制见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
 8. 主包AI 经 `get_task` / `fetch_result` 取回文本与文件清单。
 
 ### 3.3 b1 落地文件计划（受影响文件与测试面）
@@ -195,7 +195,7 @@
 - `workers[].toggles`：外包工级开关（`thinking` / `search`，默认 `false`）——派单时应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」；界面呈现随 b2（`modules/settings-app.md`）。
 - `mcp.port` / `mcp.host`：`port` = **期望端口**（重启生效；写入通道 = 文件手改、工具面无配置读写工具，实际监听端口与发布口径均见本文 §2.3）；`host` 固定 `127.0.0.1`（不提供跳网访问——R9 边界；非该值按非法配置处理：回退默认并记日志）。
 - `outboxDir`：交付目录——**实际路径**按交付策略解析（配置值不可用 ⇒ 回落），解析时点与落点唯一性见 `docs/design/modules/outbox.md`；界面显示实际路径（b2）。
-- `session`：会话复用策略（`reuse` 默认 `true`；`ttlMs` 空闲 TTL 默认 600000ms；`maxTasksPerSession` 默认 5）——机制权威见 `modules/browser-engine.md` §9；主进程透传口径同 `toggles`（`modules/scheduler.md` §10）。
+- `session`：会话复用策略（`reuse` 默认 `true`；`ttlMs` 空闲 TTL 默认 600000ms；`maxTasksPerSession` 默认 5）——机制权威见 `modules/browser-engine.md` §9；主进程透传口径同 `toggles`（`modules/scheduler.md` §10）；界面读写 = 设置界面外包工页「会话复用」块（b6；写路径 = 补丁操作 `session.set`，`modules/settings-app.md` §2 / §7）。
 
 ## 5. 错误与人工接管（设计点⑨）
 

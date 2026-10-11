@@ -18,9 +18,9 @@ const CH = {
 };
 
 contextBridge.exposeInMainWorld('fo', {
-  /** 只读快照（服务状态 / 实际地址 / 两形态片段文本 / workers 视图 / 交付目录 / 导出与日志目录 / 版本） */
+  /** 只读快照（服务状态 / 实际地址 / 两形态片段文本 / workers 视图 / 平台子键能力 / 会话三键 / 交付目录 / 导出与日志目录 / 版本） */
   getSnapshot: () => ipcRenderer.invoke(CH.snapshot),
-  /** 配置变更唯一写入口：op 形如 {op:'worker.add', platform:'deepseek'}（七操作见 patches.mjs） */
+  /** 配置变更唯一写入口：op 形如 {op:'worker.add', platform:'deepseek'}（八操作见 patches.mjs） */
   patch: (op) => ipcRenderer.invoke(CH.patch, op),
   /** 「打开并检查」：打开 / 复用该外包工浏览器窗口到平台页并刷新登录态 */
   checkWorker: (id) => ipcRenderer.invoke(CH.checkWorker, id),

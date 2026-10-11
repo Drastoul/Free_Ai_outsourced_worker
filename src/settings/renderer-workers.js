@@ -1,7 +1,8 @@
 /* 免费外包 · 设置窗口渲染进程——外包工页（T2–T8）：行渲染与行内交互（改名 / 启用 / 开关 / 上移下移 / 打开并检查 / 删除二次确认）
  * + 新增选平台对话框。经典 script；共享工具与状态来自 window.FOUI（renderer.js，先加载）；零 Node 能力，只经 window.fo。
- * 冻结契约（批次档 b2 §2）：行 [data-worker-id] · [data-field=name|enabled|status|checked] ·
- *   [data-toggle=thinking|search] · [data-action=up|down|delete|check]；确认框 [data-confirm] + confirm-yes/no。
+ * 冻结契约（批次档 b2 §2；b6 §2 增补）：行 [data-worker-id] · [data-field=name|enabled|status|checked] ·
+ *   [data-toggle=thinking|search]（按快照 platforms[].toggles 子键门控）· [data-field=toggles-unsupported]（不受支持子键提示行）·
+ *   [data-action=up|down|delete|check]；确认框 [data-confirm] + confirm-yes/no；render() 兼挂会话复用块（FOUI.session）。
  */
 (function () {
   'use strict';
@@ -34,6 +35,13 @@
     var platforms = (state.snapshot && state.snapshot.platforms) || [];
     var found = platforms.filter(function (p) { return p.id === id; })[0];
     return found ? (found.label || found.id) : String(id || '');
+  }
+
+  /** 平台子键能力（快照 platforms[].toggles；缺信息 / 未知平台 ⇒ 两子键按不支持——b6 D6） */
+  function platformToggles(id) {
+    var platforms = (state.snapshot && state.snapshot.platforms) || [];
+    var found = platforms.filter(function (p) { return p.id === id; })[0];
+    return (found && found.toggles) || {};
   }
 
   function actionButton(action, label, disabled, onClick) {
@@ -92,9 +100,13 @@
     enable.appendChild(enabledBox);
     enable.appendChild(el('span', null, '启用'));
 
+    // 开关：按平台子键能力门控（b6/T3）——受支持子键才渲染对应开关；不受支持子键收一行提示
+    var caps = platformToggles(w.platform);
     var toggles = el('div', 'row-toggles');
+    var unsupported = [];
     [['thinking', '深度思考'], ['search', '联网搜索']].forEach(function (pair) {
       var key = pair[0];
+      if (caps[key] !== true) { unsupported.push(pair[1]); return; }
       var box = el('input');
       box.type = 'checkbox';
       box.checked = !!(w.toggles && w.toggles[key]);   // 勾选态 == 该外包工的配置值（快照 workers[].toggles）
@@ -114,6 +126,11 @@
       label.appendChild(el('span', null, pair[1]));
       toggles.appendChild(label);
     });
+    if (unsupported.length) {
+      var unsupportedNote = el('span', 'meta', '该平台不支持：' + unsupported.join('、') + '（不会应用）');
+      unsupportedNote.setAttribute('data-field', 'toggles-unsupported');
+      toggles.appendChild(unsupportedNote);
+    }
 
     var actions = el('div', 'row-actions');
     var up = actionButton('up', '上移', index === 0, function () { move(w.id, 'up'); });
@@ -137,7 +154,7 @@
     return li;
   }
 
-  /* ---------- 渲染（快照 ⇒ 行列表 + 登录引导） ---------- */
+  /* ---------- 渲染（快照 ⇒ 行列表 + 登录引导 + 会话复用块） ---------- */
   function render() {
     var list = $('[data-worker-list]');
     var workers = (state.snapshot && state.snapshot.workers) || [];
@@ -145,6 +162,9 @@
     workers.forEach(function (w, i) { list.appendChild(buildRow(w, i, workers.length)); });
     $('[data-field="workers-empty"]').hidden = workers.length > 0;
     renderLoginGuide();
+    // 会话复用块（b6/T7）：挂点在本页 render（renderer.js 已分发至此，其本文件零改动）
+    if (api.session && typeof api.session.render === 'function') api.session.render();
+    else console.error('会话复用块脚本未加载（renderer-session.js）');
   }
 
   /* ---------- 登录引导（T6 / M1；末句为设计档原文，勿改——按快照 login_required 常显，窗口重开后仍在） ---------- */

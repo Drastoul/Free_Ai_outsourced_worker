@@ -109,7 +109,7 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 ## 10. 与引擎子进程的接口（摘要）
 
 - 逐行 JSON-RPC（stdio）：`engine.health`、`task.run({taskId, worker, prompt, files, outboxDir, toggles})`、`task.cancel({taskId})`；**`worker` = 对象 `{id, name, platform}`**（与 manifest / TaskView 同形：`id` 定位 `<userData>/profiles/<workerId>/`、`platform` 选适配器）；`toggles` = 该外包工配置值（`{thinking, search}`，**主进程传入**——引擎不自行读配置，保持单一事实源；应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）；`session` = 会话复用策略值（`{reuse, ttlMs, maxTasksPerSession}`，同样**主进程传入**——缺省时引擎用同一套设计默认值；机制见 `modules/browser-engine.md` §9）。
-- 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok}`（形状见 `docs/design/overview.md` §3.2 第 7 步）；**失败 = result 内 `error: {code, message, hint?} | null`**（与 manifest 的 `error` 同形；**JSON-RPC error 仅用于协议级 / 内部异常**，不承载业务失败）；失败时 `delivery` / `toggles` 可缺席（缺席 ⇒ 视为未产出，不得为凑字段造值）。
+- 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok, checked, unsupported}`（b6 起后两键；形状见 `docs/design/overview.md` §3.2 第 7 步）；**失败 = result 内 `error: {code, message, hint?} | null`**（与 manifest 的 `error` 同形；**JSON-RPC error 仅用于协议级 / 内部异常**，不承载业务失败）；失败时 `delivery` / `toggles` 可缺席（缺席 ⇒ 视为未产出，不得为凑字段造值）。
 - 进度事件：`{event: "task-progress", taskId, phase}`（供 `get_task` 展示）。
 - 引擎崩溃：主进程重启引擎并置进行中任务 `E_ENGINE_DOWN`（可重派）。
 - **设置界面「打开并检查」的增量方法**（b2；2026-10-09 主包AI 裁定）：`worker.check({worker: {id, name, platform}})` ⇒ `result = {status, detail?}`（`status ∈ ready | login_required | captcha | unavailable`，与引擎 `opening` 词表同源；失败走既有 `result.error` 口径）。语义 = 打开 / 复用该外包工浏览器会话并刷新登录态（**不发送消息、不关窗口**）；该外包工有在途任务时直接拒绝。既有四方法（`engine.health` / `task.run` / `task.cancel` / `engine.shutdown`）契约不变。

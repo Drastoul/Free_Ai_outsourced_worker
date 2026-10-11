@@ -161,6 +161,7 @@ test('J3 出错即换新：首单 E_SEND_FAILED ⇒ 次单计数=2 + 日志 erro
     const r1 = await runTask({ root, runner, taskId: 'fx-j3-1', timeouts });
     assert.equal(r1.canceled, false);
     assert.equal(r1.error?.code, 'E_SEND_FAILED', `首单应判发送未确认：${JSON.stringify(r1)}`);
+    assert.match(r1.error.message, /发送未确认：\d+ms 内未观测到答复流请求/, 'T2：失败回执应为中性词形（不绑定平台协议名）');
     const r2 = await runTask({ root, runner, taskId: 'fx-j3-2', timeouts });
     assert.equal(r2.error, null, `次单应完成：${JSON.stringify(r2.error)}`);
     assert.equal(state.openSessions, 2, '出错后应换新会话');
@@ -229,7 +230,7 @@ test('J8 取消即换新：运行中取消 ⇒ result.canceled=true ⇒ 次单�
   try {
     const timeouts = { streamFirstByteMs: 2500, taskTimeoutMs: 30000 };
     const p1 = runTask({ root, runner, taskId: 'fx-j8-1', timeouts });
-    const sent = await waitForLog(logs, /已发送（观测到 chat\/completion 请求）/, 30000);
+    const sent = await waitForLog(logs, /已发送（观测到答复流请求）/, 30000);
     const canceled = runner.cancel({ taskId: 'fx-j8-1' });
     const r1 = await p1;
     assert.ok(sent, '首单应在预算内进入已发送（send 确认）');
