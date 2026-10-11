@@ -3,6 +3,9 @@ node_modules/
 dist/
 release/
 
+# 随包浏览器二进制（构建期下载，见 scripts/fetch-browsers.mjs）
+.playwright-browsers/
+
 # 工具自己的浏览器配置（含登录态，绝不可提交）
 .browser-profile/
 

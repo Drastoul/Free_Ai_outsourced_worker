@@ -86,8 +86,10 @@ export function createSettingsWindow({ service, log }) {
     }
   }
 
-  /** 单例打开：未销毁 ⇒ 聚焦；已销毁 ⇒ 重建后聚焦（T1 / M9） */
-  function open() {
+  /** 单例打开：未销毁 ⇒ 聚焦；已销毁 ⇒ 重建后聚焦（T1 / M9）。
+   *  initialPage（T5 接缝）= 新建窗口的初始页：经 loadFile query 传 ?page=<name>（渲染层按 PAGES 校验）；
+   *  已存在窗口 ⇒ 不追溯换页（照旧显示 / 聚焦）。 */
+  function open(initialPage) {
     if (win && !win.isDestroyed()) {
       safeShow(win);
       log.info('设置窗口：已存在 ⇒ 显示并聚焦');
@@ -124,8 +126,9 @@ export function createSettingsWindow({ service, log }) {
       }
     });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    const loadOptions = initialPage ? { query: { page: String(initialPage) } } : undefined;
     win
-      .loadFile(PAGE_PATH)
+      .loadFile(PAGE_PATH, loadOptions)
       .then(() => log.info(`设置窗口：已创建并加载界面（${PAGE_PATH}）`))
       .catch((e) => {
         // 界面资源未落地（切分 ③）时：明示 + 仍显示窗口（不静默留一个不可见窗口）

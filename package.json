@@ -5,6 +5,8 @@
   "type": "module",
   "description": "免费外包 —— 让主包AI调用网页版AI（DeepSeek 等）干活，并把结果与文件取回来",
   "main": "src/main/index.mjs",
+  "author": "免费外包",
+  "license": "UNLICENSED",
   "scripts": {
     "app": "electron .",
     "probe:deepseek": "node probe/probe-deepseek.mjs",
@@ -12,13 +14,18 @@
     "verify:engine": "node --test test/integration/engine.test.mjs",
     "verify:loop": "node --test test/integration/loop.test.mjs",
     "verify:runtime": "node --test test/integration/runtime.test.mjs",
-    "verify:settings": "node --test test/integration/settings.test.mjs"
+    "verify:settings": "node --test test/integration/settings.test.mjs",
+    "fetch:browsers": "node scripts/fetch-browsers.mjs",
+    "dist": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --x64 --dir",
+    "verify:pack": "node --test test/integration/pack.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "playwright": "^1.64.0"
   },
   "devDependencies": {
-    "electron": "^44.7.0"
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
   }
 }

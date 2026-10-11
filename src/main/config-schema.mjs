@@ -8,7 +8,8 @@ export const CONFIG_VERSION = 1;
 export const DEFAULT_CONFIG = {
   version: CONFIG_VERSION,
   mcp: { port: 17873, host: '127.0.0.1', token: '' },
-  browser: { mode: 'chromium', channel: 'msedge', headless: false },
+  // 出厂随包 Chromium：mode=chromium 且 channel 空 ⇒ 引擎用随包运行时（b4）；切系统 Edge = mode:'edge' + 重启
+  browser: { mode: 'chromium', channel: '', headless: false },
   outboxDir: DEFAULT_OUTBOX_DIR,
   workers: [
     {

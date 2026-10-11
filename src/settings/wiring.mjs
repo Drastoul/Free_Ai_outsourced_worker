@@ -7,8 +7,9 @@ import { createSettingsService } from './service.mjs';
 import { createSettingsWindow, openPathExternal } from './window.mjs';
 
 /**
- * @param {{config: object, scheduler: object, engine: object, log: object, userDataDir: string,
- *          version: string, getServiceInfo?: () => object, notify?: Function, env?: object}} deps
+ * @param {{config: object, scheduler: object, engine: object, log: object, userDataDir: string, version: string,
+ *          guidePath?: string, getServiceInfo?: () => object, notify?: Function, env?: object}} deps
+ *        guidePath = 「打开随包文档」落点（打包态 = <resources>/guide/agent-onboarding.md；缺省 = 服务内开发期默认）；
  *        notify = 托盘通知（服务未就绪 / 打开失败时明示，不静默）；env = 进程环境（FO_OPEN_SETTINGS 接缝）
  * @returns {{service: object, controller: object, openSettings: Function, openOutbox: Function,
  *            openLogs: Function, openKind: Function, openIfRequested: Function, emitChanged: Function}}
@@ -20,6 +21,7 @@ export function createSettingsWiring({
   log,
   userDataDir,
   version,
+  guidePath,
   getServiceInfo = () => ({}),
   notify = () => {},
   env = process.env,
@@ -32,6 +34,7 @@ export function createSettingsWiring({
     log,
     userDataDir,
     version,
+    guidePath,
     getServiceInfo,
     broadcast: (snapshot) => controller?.broadcast(snapshot) === true,
   });
@@ -42,8 +45,8 @@ export function createSettingsWiring({
     void service.notifyOutboxFallback(outbox);
   });
 
-  /** 托盘入口：打开设置窗口（单例：未销毁 ⇒ 聚焦；已销毁 ⇒ 重建） */
-  const openSettings = () => controller.open();
+  /** 打开设置窗口（单例：未销毁 ⇒ 聚焦；已销毁 ⇒ 重建）；initialPage = 可选初始页（T5 首启引导接缝） */
+  const openSettings = (initialPage) => controller.open(initialPage);
 
   /** 托盘入口：按落点解析结果用系统默认程序打开（outbox 实际路径 / 日志目录） */
   async function openKind(kind) {

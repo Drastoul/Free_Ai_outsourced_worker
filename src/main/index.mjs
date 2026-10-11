@@ -1,9 +1,9 @@
-// 应用入口（主进程）：单实例 / 托盘 / 生命周期 / 配置 / 引擎接线 / MCP 服务 / runtime.json / 设置窗口接线（b2，见 src/settings/wiring.mjs）。
+// 应用入口（主进程）：单实例 / 托盘 / 生命周期 / 配置 / 引擎接线（打包态取值见 src/main/packaging.mjs）/
+// MCP 服务 / runtime.json 生命周期（写删见 src/main/runtime-file.mjs）/ 设置窗口接线（b2，见 src/settings/wiring.mjs）。
 // 设计权威：docs/design/overview.md §2（进程与 MCP 接入）、§2.1（二实例唤起）、§2.3（端口策略与 runtime.json）、§4（配置存储）。
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
 import { createLogger } from './log.mjs';
 import { loadConfig } from './config.mjs';
@@ -12,11 +12,9 @@ import { EngineClient } from './engine-client.mjs';
 import { Scheduler } from './scheduler/scheduler.mjs';
 import { startMcpServer } from './mcp/server.mjs';
 import { createSettingsWiring } from '../settings/wiring.mjs';
-import { resolveOutboxDir, writeJsonAtomic } from '../shared/outbox.mjs';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '..', '..');
-const engineHostScript = path.join(repoRoot, 'src', 'engine', 'host.mjs');
+import { resolveRuntimePaths } from './packaging.mjs';
+import { writeRuntimeFile, removeRuntimeFile } from './runtime-file.mjs';
+import { resolveOutboxDir } from '../shared/outbox.mjs';
 
 // 测试 / 多实例隔离：FO_USER_DATA 覆盖 userData（须在读取任何路径前设置）
 if (process.env.FO_USER_DATA) {
@@ -96,6 +94,13 @@ function withSettings(fn, { notReadyMessage = '设置界面尚未就绪，请稍
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // 打包态 / 开发态运行期取值（T4）：Electron 侧取值注入纯函数（src/main/packaging.mjs 不 import electron）
+  const rt = resolveRuntimePaths({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    execPath: process.execPath,
+    appPath: app.getAppPath(),
+  });
   const userData = app.getPath('userData');
   await fs.promises.mkdir(userData, { recursive: true });
   log = createLogger({ dir: userData, console: true });
@@ -126,8 +131,9 @@ async function main() {
 
   // 引擎子进程（崩溃自动重启；就绪前任务排队）
   engine = new EngineClient({
-    hostScript: engineHostScript,
-    cwd: repoRoot,
+    hostScript: rt.hostScript,
+    cwd: rt.engineCwd,
+    extraEnv: rt.engineEnv,
     userDataDir: userData,
     configFile: config.file,
     version,
@@ -152,6 +158,7 @@ async function main() {
     log,
     userDataDir: userData,
     version,
+    guidePath: rt.guidePath,
     notify: (n) => tray?.notify(n),
     getServiceInfo: () => ({
       ok: mcp?.ok === true,
@@ -183,7 +190,7 @@ async function main() {
   // MCP 服务（端口顺延 ≤ +120；全占 ⇒ 不启动 + 明示）
   mcp = await startMcpServer({ version, config, scheduler, log });
   if (mcp.ok) {
-    runtimeFile = await writeRuntimeFile({ userData, host: mcp.host, port: mcp.port, version, startedAt });
+    runtimeFile = await writeRuntimeFile({ userData, host: mcp.host, port: mcp.port, version, startedAt, log });
     tray.update({
       url: mcp.url,
       service: '运行中',
@@ -204,26 +211,18 @@ async function main() {
     });
   }
 
+  // 首启引导（T5/F6.3）：config.json 首次创建 ⇒ 服务就绪后自动打开设置窗口，落「接入指引」页
+  if (config.firstRun) {
+    log.info('首次运行：打开设置窗口');
+    settings.openSettings('guide');
+  }
+
   // 服务状态就绪 ⇒ 推一次快照（接入指引页据实况显示「运行中 / 未启动 + 原因 / 建议」）
   void settings?.emitChanged('服务状态');
 
   app.on('window-all-closed', () => {
     /* 托盘常驻：不随窗口关闭退出 */
   });
-}
-
-async function writeRuntimeFile({ userData, host, port, version, startedAt }) {
-  const file = path.join(userData, 'runtime.json');
-  await writeJsonAtomic(file, {
-    pid: process.pid,
-    host,
-    port,
-    url: `http://${host}:${port}/mcp`,
-    version,
-    startedAt,
-  });
-  log.info(`runtime.json 已写：${file}（port=${port}）`);
-  return file;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +257,8 @@ async function cleanup() {
   } catch (e) {
     log.warn(`引擎停机异常：${e?.message || e}`);
   }
-  removeRuntimeFile();
+  removeRuntimeFile(runtimeFile, log);
+  runtimeFile = null;
   try {
     tray?.destroy();
   } catch {
@@ -272,17 +272,6 @@ function withTimeout(promise, ms, message) {
     promise,
     new Promise((_resolve, reject) => setTimeout(() => reject(new Error(message)), ms)),
   ]);
-}
-
-function removeRuntimeFile() {
-  if (!runtimeFile) return;
-  try {
-    fs.rmSync(runtimeFile, { force: true });
-    log.info(`runtime.json 已删除：${runtimeFile}`);
-  } catch (e) {
-    log.warn(`runtime.json 删除失败：${e?.message || e}`);
-  }
-  runtimeFile = null;
 }
 
 // 崩溃 / 强退兜底：尽力删除 runtime.json（进程被强杀时不保证）

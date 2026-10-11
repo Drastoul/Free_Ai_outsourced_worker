@@ -20,10 +20,13 @@ function sleep(ms) {
 
 export class EngineClient extends EventEmitter {
   /**
-   * @param {{hostScript: string, cwd?: string, userDataDir: string, configFile: string,
-   *          version?: string, log: object, notify?: Function}} options
+   * @param {{hostScript: string, cwd?: string, userDataDir: string, configFile: string, version?: string,
+   *          log: object, notify?: Function, extraEnv?: object}} options
+   *        extraEnv = 附加子进程环境变量（b4 打包态注入 PLAYWRIGHT_BROWSERS_PATH；缺省 {} = 不注入）
    */
-  constructor({ hostScript, cwd, userDataDir, configFile, version = '0.0.0', log, notify = () => {} }) {
+  constructor({
+    hostScript, cwd, userDataDir, configFile, version = '0.0.0', log, notify = () => {}, extraEnv = {},
+  }) {
     super();
     this.hostScript = hostScript;
     this.cwd = cwd;
@@ -32,6 +35,7 @@ export class EngineClient extends EventEmitter {
     this.version = version;
     this.log = log;
     this.notify = notify;
+    this.extraEnv = extraEnv || {};
 
     this.child = null;
     this.pending = new Map();
@@ -61,6 +65,7 @@ export class EngineClient extends EventEmitter {
           FO_USER_DATA: this.userDataDir,
           FO_CONFIG_FILE: this.configFile,
           FO_APP_VERSION: this.version,
+          ...this.extraEnv,
         },
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,

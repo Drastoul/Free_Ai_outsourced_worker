@@ -3,7 +3,7 @@
 > 编制：主 agent · 2026-10-10 · 来源 = 用户 2026-10-09「按顺序完成其他流程」+ 需求 R6（打包 .exe 分发）与 R9·AC-R9-3（换机自适配）+ 设计档 overview 打包与换机章节 + 外包产出的打包配置草案（outbox/20261009-202608-7e7d）。
 > 台账 = #6（免费外包 · 归批）。前情 = docs/batches/b2-settings-ui.md §6（已收口 2026-10-10）。
 ## §1 讨论（主 agent）
-**状态行**：进行中（任务书就绪；设计评审批次 1 = changes-required（1🔴·6🟡·5🔵）；裁定后 10 条要改（修复轮已派）、2 条主包AI 已修（文档地图登记 · §1 收成实况））
+**状态行**：已收口 2026-10-11（三切分交付（切分 3 的 coder 因账户余额中断，清单转正由主包AI 直做并明示）；父侧验收全绿（verify:pack 4/4 · 单元 7/7 · b1 27/27 · b2 35/35 · mcp/engine/runtime 全绿 · settings 6/6 · loop 真机 1/1）；产物 334.7 MiB；实测回调与清单落档；M1–M5 待人工）
 
 
 ### §1 讨论与来源（主包AI）
@@ -103,9 +103,9 @@
 
 | 文件 | 预计 | 职责 |
 |---|---|---|
-| `electron-builder.yml` | ~60 行 | 打包配置权威：**`productName: 免费外包`**（产品名唯一来源——`win-unpacked` 可执行名与由 `productName` 派生的产物名；第 0 步构建实测确认，不符则显式补对应字段并回调 P1）· NSIS **`artifactName: "${productName}-${version}-setup.${ext}"`**（P1 文件名断言的唯一来源，不依赖未验证的默认派生）· asar / asarUnpack、files 白名单、extraResources（`docs/guide` → `guide`；`.playwright-browsers` → `ms-playwright`）、win / NSIS 选项；输出 `release/` |
-| `src/main/packaging.mjs` | ~45 行 | 打包态路径与运行期环境单一计算点（`hostScript` / `engineCwd` / `engineEnv` / `guidePath`；纯函数可单测；**入参注入、不 import electron**——见 T4） |
-| `scripts/fetch-browsers.mjs` | ~40 行 | 构建期下载随包 Chromium 至 `.playwright-browsers/`（幂等；失败退出非零） |
+| `electron-builder.yml` | **实测 62 行** | 打包配置权威：**`productName: 免费外包`**（产品名唯一来源——`win-unpacked` 可执行名与由 `productName` 派生的产物名；第 0 步构建实测确认，不符则显式补对应字段并回调 P1）· NSIS **`artifactName: "${productName}-${version}-setup.${ext}"`**（P1 文件名断言的唯一来源，不依赖未验证的默认派生）· asar / asarUnpack、files 白名单、extraResources（`docs/guide` → `guide`；`.playwright-browsers` → `ms-playwright`）、win / NSIS 选项；输出 `release/` |
+| `src/main/packaging.mjs` | **实测 26 行** | 打包态路径与运行期环境单一计算点（`hostScript` / `engineCwd` / `engineEnv` / `guidePath`；纯函数可单测；**入参注入、不 import electron**——见 T4） |
+| `scripts/fetch-browsers.mjs` | **实测 85 行** | 构建期下载随包 Chromium 至 `.playwright-browsers/`（幂等；失败退出非零） |
 | `build/icon.ico` | 二进制 | 安装器 / 应用图标（256×256；无设计稿 ⇒ 简化图形，人工确认外观；生成脚本不入库） |
 | `test/integration/pack.test.mjs`（+拆件） | ~260 行 | `npm run verify:pack`：段 A 产物断言 / 段 B 打包态启动 / 段 C 随包 Chromium / 段 D 首启（超 300 行 ⇒ 按段拆分） |
 | `docs/batches/b4-package-ship.units.mjs` | ~80 行 | 随批单元（`node --test` 直跑）：packaging 两态路径 / `extraEnv` 合成 / 首建标记 / 新默认值 |
@@ -116,15 +116,15 @@
 | 文件 | 改动 | 预算 |
 |---|---|---|
 | `package.json`（24） | scripts += `dist` / `dist:dir` / `fetch:browsers` / `verify:pack`；devDependencies += `electron-builder`；补 `author` / `license`；**不带入草案的 `postinstall`**（无原生模块，避免每次 install 触发多余动作） | 24 → ~37 |
-| `src/main/index.mjs`（296） | 接线：`packaging.mjs` 计算值接入（`hostScript` / `cwd` / `extraEnv`）、`guidePath` 注入、首启开窗、日志行 | ≤ +7 ⇒ 触及 300 档；**拆分计划**：若 >300，把 `writeRuntimeFile` / `removeRuntimeFile`（`:215-227` / `:277-286`）纯搬迁至 `src/main/runtime-file.mjs`（无行为变化） |
+| `src/main/index.mjs`（296） | 接线：`packaging.mjs` 计算值接入（`hostScript` / `cwd` / `extraEnv`）、`guidePath` 注入、首启开窗、日志行 | **实测 285（越档搬迁已执行）** |
 | `src/main/engine-client.mjs`（291） | 新增 `extraEnv` 选项并入 spawn env；协议 / 超时 / 重试 / 四方法不动 | ≤ +6（291 ⇒ ≤297；**越档处置**：若超 300 ⇒ 按 `index.mjs` 同法外提纯函数段至新模块、无行为变化，拆分点实施时定并回调） |
 | `src/settings/service.mjs`（293） | guide 路径注入化（缺省 = 现状；打包态由 wiring 传入） | ≤ +6（293 ⇒ ≤299；**越档处置**：若超 300 ⇒ 按 `index.mjs` 同法外提、无行为变化，拆分点实施时定并回调） |
 | `src/settings/wiring.mjs`（78） | 透传 `guidePath`；`openSettings(initialPage)` 透传初始页（T5） | ≤ +5 |
 | `src/settings/window.mjs`（170） | 初始页接缝（T5）：`open(initialPage?)` + 新建窗口时 `loadFile(PAGE_PATH, {query})`；已存在窗口 ⇒ 照旧显示 / 聚焦（不追溯换页） | 170 → ~178（≤ +8；**拆分判断**：无越档风险） |
 | `src/settings/renderer.js`（220） | 初始页接缝（T5）：`boot` 读 `location.search` 的 `page`、按 `PAGES` 校验后 `setPage`（缺省 / 非法 ⇒ `workers`） | 220 → ~222（≤ +2；**拆分判断**：无越档风险） |
-| `src/main/config-schema.mjs`（205） | `DEFAULT_CONFIG.browser.channel`：`'msedge'` → `''`（T2；序约束见裁定 ②） | ±1 |
+| `src/main/config-schema.mjs`（205） | `DEFAULT_CONFIG.browser.channel`：`'msedge'` → `''`（T2；序约束见裁定 ②） | **实测 206（±1）** |
 | `src/main/config.mjs`（104） | `loadConfig` 暴露首建标记（`store.firstRun`） | ≤ +3 |
-| `.gitignore`（19） | += `.playwright-browsers/` | +1 |
+| `.gitignore`（19） | += `.playwright-browsers/` | **实测 22（+3）** |
 
 ### 打包态 / 开发态两态对照（本批接线的判据面；裁定 ① 的两态判据）
 
@@ -175,7 +175,7 @@
 
 | 命令 | 断言（读数） |
 |---|---|
-| P1 构建：`npm run dist` | exit 0；产物 `release/免费外包-<version>-setup.exe`（= `${productName}-${version}-setup.${ext}`，可执行，文件名含版本号——AC-R6-1；**产物名 / 程序名唯一来源 = `electron-builder.yml` 的 `artifactName` / `productName`**，见文件计划）；`release/win-unpacked/` 下齐：`免费外包.exe` · `resources/app.asar` · `resources/app.asar.unpacked/node_modules/{playwright,playwright-core}/` · `resources/ms-playwright/chromium-*/chrome-win/chrome.exe` · `resources/guide/{agent-onboarding.md,agent-brief.md}`；包内不含 `probe/**` · `test/**` · `docs/**`（抽查：`npx @electron/asar list`——`@electron/asar` 随 electron-builder 依赖在场）；**体积辅助判**：预期 150–250MB 级（b1 已记 ~200MB 级预期——`docs/batches/b1-core-loop.md:212`），机器断言 ≥ 120MB；**读数口径**：§1 记的「成品约 106MB」为**未含随包浏览器**的首次冒烟读数（`docs/batches/b4-package-ship.md:18`），随包后应显著高于 120MB（主判 = 上列文件清单；体积作「随包浏览器是否遗漏」的辅助排查） |
+| P1 构建：`npm run dist` | exit 0；产物 `release/免费外包-<version>-setup.exe`（= `${productName}-${version}-setup.${ext}`，可执行，文件名含版本号——AC-R6-1；**产物名 / 程序名唯一来源 = `electron-builder.yml` 的 `artifactName` / `productName`**，见文件计划）；`release/win-unpacked/` 下齐：`免费外包.exe` · `resources/app.asar` · `resources/app.asar.unpacked/node_modules/{playwright,playwright-core}/` · `resources/ms-playwright/chromium-*/chrome-win64/chrome.exe`（**实况布局（playwright 1.64 Chrome for Testing）；早期条文写 `chrome-win` 为过时串**） · `resources/guide/{agent-onboarding.md,agent-brief.md}`；包内不含 `probe/**` · `test/**` · `docs/**`（抽查：`npx @electron/asar list`——`@electron/asar` 随 electron-builder 依赖在场）；**体积口径（实测回调 2026-10-11）**：实测 **334.7 MiB**（安装包 350,929,208 B）——成因 = `install chromium` 随带 `chromium-headless-shell` / `ffmpeg` / `winldd`（收敛候选见台账 #21），机器断言 ≥ 120MB（**无上限**）；**读数口径**：§1 记的「成品约 106MB」为**未含随包浏览器**的首次冒烟读数（`docs/batches/b4-package-ship.md:18`），随包后应显著高于 120MB（主判 = 上列文件清单；体积作「随包浏览器是否遗漏」的辅助排查） |
 | P2 打包态自检：`npm run verify:pack` | 段 A 产物断言（= P1 清单的自动版）· 段 B 打包态启动（隔离 userData；剥 `ELECTRON_RUN_AS_NODE`；`release/win-unpacked/免费外包.exe` ⇒ `/healthz` ok ∧ 日志「引擎就绪」∧ `runtime.json` 字段齐 ⇒ `--quit` exit 0 ∧ `runtime.json` 已删）· 段 C 随包 Chromium（配置 `mode=chromium` ⇒ 派单一条 ⇒ 浏览器启动、日志「启动浏览器 … channel=随包 chromium」⇒ **进程映像读数（硬断言）**：运行期间测试侧枚举进程映像路径（PowerShell `Get-CimInstance Win32_Process` 读 `ExecutablePath`，轮询至超时），命中 `release/win-unpacked/resources/ms-playwright/` 下的浏览器进程 = 过、超时 = 失败 ⇒ 未登录 ⇒ 终态 `needs_human`/`E_LOGIN_REQUIRED`（风控则 `E_CAPTCHA_OR_RISK`，同属预期））· 段 D 首启（空 userData ⇒ 窗口存在 ∧ 激活页 =「接入指引」∧ `[data-field=mcp-url]` == 实际地址 ∧ 日志「首次运行」行；读数 = b2 既有 CDP 读 DOM 接缝；接缝实现见 T5） |
 | P3 无 Node 环境替代判据（在 P2 内执行） | 段 B/C 的启动环境 = 剥 `ELECTRON_RUN_AS_NODE` + `PATH` 只留系统目录（不含 Node 安装目录）⇒ 仍全过 = 「引擎 / 浏览器不依赖系统 Node」的机制读数；**与真换机的差距**（本机 Edge 仍在、系统差异）如实记——AC-R6-2 / AC-R6-3 / AC-R9-3 以 M1 为准 |
 | P4 回归 | b1/b2 命令全绿（`verify:mcp` / `verify:engine` / `verify:loop` / `verify:runtime` / `verify:settings` + `b1-core-loop.units.mjs` / `b2-settings-ui.units.mjs`）：六件套 / `/healthz` 载荷 / 错误码表 / 配置 schema 既有键 / manifest / `runtime.json` 字段不变；`channel` 默认值改动只影响缺失键补齐（测试夹具均显式写 browser 段，不受影响）；首启开窗对既有测试的影响核对一遍（各夹具启动前均写 config） |
@@ -266,6 +266,144 @@
 
 VERDICT: changes-required
 
+### 轮次 2（评审子代理）
+
+**评审对象**：b4 打包与换机 · §2 任务书（T1–T6 / 文件计划 9 新增·13 修改行 / 3 份切分 / P1–P5 + M1–M5 / 冻结面 / 边界）+ §1 三条父侧裁定（对象状态：待评审 → 轮 2 复核）。本轮为**定点复核**：只核对轮次 1 的 12 条与修复引入的新问题（未做全面复审）。
+
+| # | 类别 | 严重度 | 状态 | 结论与证据（本轮读出） |
+|---|------|--------|------|------------------------|
+| 1 | 文件计划 / 清晰度 | 🔴 | **Fixed** | 初始页接缝已补进设计面：§2:90「**初始页接缝（评审 #1 补齐；最小面）**：`src/settings/window.mjs:90` 的 `open()` 增可选参 `initialPage`」；文件计划 §2:123「`src/settings/window.mjs`（170） | 初始页接缝（T5）：`open(initialPage?)` + 新建窗口时 `loadFile(PAGE_PATH, {query})`」与 §2:124「`src/settings/renderer.js`（220） | 初始页接缝（T5）：`boot` 读 `location.search` 的 `page`」；切分 2 文件域 §2:157「`src/settings/window.mjs` · `src/settings/renderer.js`（初始页接缝，T5）」；冻结面 §2:149「设置窗口初始页接缝（T5；切分 2 交付、切分 3 依赖）：`openSettings(initialPage?)` ⇒ 新建窗口 URL 带 `?page=<name>`」；边界 §2:199 同步（不扩 IPC 面、不用 executeJavaScript）。锚点逐条核对为真：`src/settings/window.mjs:90:   function open() {`、`src/settings/renderer.js:195:   function boot() {`、`src/settings/renderer.js:10:   var PAGES = ['workers', 'guide', 'outbox', 'about'];`、`src/settings/renderer.js:201:     setPage('workers');`（现况启动页，实施时改为读 `?page=`）。所引 API 亦为真：`node_modules/electron/electron.d.ts:22456:   interface LoadFileOptions {` / `:22460:     query?: Record<string, string>;`（与设计所引 `:22456-22469` 一致）。 |
+| 2 | 需求覆盖 | 🟡 | **Accepted** | 口径已点名且上抛：§2:71「切系统 Edge 的入口 = 配置文件手改 `browser.mode:'edge'` + 重启生效」；两态对照 §2:137 同口径；残余差异（`docs/requirements/overview.md:21`/`:182` 与 `docs/design/overview.md:250`「设置中可切「用系统 Edge」」，而 `src/settings/**` 无该控件、`docs/guide/agent-onboarding.md:98` 写的是配置口径）已按 §2:239-242「未决与上抛」呈报，并由 §4:275 用户裁定收口：「**附条件裁定（切系统 Edge 的入口）**：用户未另答 ⇒ 按主包AI 呈报的**默认 A** 推进……**「设置中可切」的界面控件本批不交付**，另立条目承接（台账行）」。理由成立（属需求措辞 vs 实现口径的差异，经用户裁定后不再是本批缺口），残余文档措辞为 🔵 级（不阻塞）。 |
+| 3 | 可行性 / 依赖 | 🟡 | **Fixed** | §2:71「**下载源 = `PLAYWRIGHT_DOWNLOAD_HOST`**（由脚本在调 `playwright install chromium` 时注入」，默认候选 + 第 0 步实测 + 外部 env 优先 + 失败读数（退出非零 + 打印实际下载源与目标目录）；风险行 §2:170 改为「中文路径 / npm 与 Electron 镜像（已实测）；**浏览器二进制镜像（待实测）**」，与 §1:18 实测清单不再冲突，并给出备选（换镜像域 / 直连官方 CDN）与读数去向（checklist「构建环境坑」）。 |
+| 4 | 清晰度 | 🟡 | **Fixed** | §2:106 显式钉住名字来源：「**`productName: 免费外包`**（产品名唯一来源」+「NSIS **`artifactName: "${productName}-${version}-setup.${ext}"`**（P1 文件名断言的唯一来源，不依赖未验证的默认派生）」；P1 §2:178 同注「**产物名 / 程序名唯一来源 = `electron-builder.yml` 的 `artifactName` / `productName`**」，并留「第 0 步构建实测确认，不符则显式补对应字段并回调 P1」。 |
+| 5 | 清晰度 / 可行性 | 🟡 | **Fixed** | §2:83「**入参口径（评审 #5）**：`isPackaged` / `resourcesPath` / `execPath` / `appPath` 为**注入值**（由 `index.mjs`（Electron 侧）取值传入），模块自身**不 import electron** ⇒ P5 纯 Node 跑法成立」；文件计划 §2:107「**入参注入、不 import electron**——见 T4」；P5 §2:182「**跑法前提** = packaging 纯 Node 件（入参注入、不 import electron——见 T4）」。先例引用亦真：`src/settings/wiring.mjs:4: // 依赖注入 = 通知（托盘）/ 配置 / 调度器 / 引擎 / 元数据（userData / 版本 / 服务实况）；Electron 面只在 window.mjs（与 preload.cjs），service.mjs 为纯 Node 面（可脱 Electron 单测）。` |
+| 6 | 验收判据 | 🟡 | **Fixed** | 由「尽力而为」改为硬断言并给出通道：§2:73「**进程映像读数**（评审 #6 定案 ①-a）：段 C 期间从测试侧枚举进程映像路径，命中 `release/win-unpacked/resources/ms-playwright/` 下的浏览器进程 = 过、超时 = 失败（硬断言）」；P2 段 C §2:179「PowerShell `Get-CimInstance Win32_Process` 读 `ExecutablePath`，轮询至超时」。辅证读数核对为真：`src/engine/browser-config.mjs:51:   const channel = explicitChannel || (mode === 'edge' ? 'msedge' : undefined);`、`src/engine/browser.mjs:92:     this.log(`启动浏览器 worker=${workerId} mode=${opts.mode} channel=${opts.channel ?? '随包 chromium'} profile=${profileDir}`);`。并写明选 ①-a 而非「日志补可执行路径」的理由（后者超出本批文件面）。 |
+| 7 | 文档状态（R1/R7a） | 🟡 | **Fixed** | 待办句已改实况：§2:22「父侧三条裁定已落位（设计档同步 2 条已落地）」、§2:205「### 裁定落位与设计档同步（2026-10-10；两条同步均已落地）」、§2:208「**设计档同步（已落地，2026-10-10 主 agent）**」。盘上实况同步核对为真：`docs/design/overview.md:176:    "browser": { "mode": "chromium", "channel": "", "headless": false },`、`docs/design/modules/settings-app.md:10: - **首次启动引导（F6.3）**：\`config.json\` **首次创建**（即首启）⇒ 自动打开设置窗口并落在**接入指引**页（判据见批次档 b4 §2）。` |
+| 8 | 受影响文件尺寸标注 | 🔵 | **Fixed** | §2:125 现况改「`src/main/config-schema.mjs`（205）」（实读 205 行，一致）；越档处置补齐：§2:121「**越档处置**：若超 300 ⇒ 按 `index.mjs` 同法外提、无行为变化，拆分点实施时定并回调」（service.mjs 行）与 §2:120（engine-client.mjs 行，同口径）。 |
+| 9 | 引用纪律 | 🔵 | **Fixed** | §2:32 现为「**R9·F9.4**（`:248`）」与「**AC-R9-3**（`:258`」；需求档实读一致：`:248: - F9.4 换机自适配：目标机无 Node、无额外浏览器也可运行（浏览器随包）……`、`:258: - AC-R9-3（换机操作可证伪）：在一台未装 Node 的 Windows PC 安装 → 首次启动即可按界面显示片段完成接入 → 派单取件一次（与 AC-R6-2 同批执行）。` |
+| 10 | 文档归属（地图） | 🔵 | **Unfixed（部分）** | b4 批次档已登记：`docs/README.md:24: | 批次档 b4 | \`docs/batches/b4-package-ship.md\` | 同上（b4 打包与换机自适配） | 任务书就绪（设计评审批次 1 = changes-required，修复轮进行中） |`；但计划新落的 `docs/batches/b4-package-ship.checklist.md`（§2:112）仍不在 `docs/README.md:4: > 新建文档必须先在本表登记再落文件；文件名与路径用 ASCII，正文中文。` 的登记面内，且 `:27` 的随批面枚举只含「单元测试文件…与 fixtures」，未覆盖「随批清单」。另 `:24` 的状态列相对 §2（设计完成 + 修复已落）已滞后。建议：登记该清单，或把地图规则改写为覆盖「批次档 / 随批清单」。 |
+| 11 | 文档卫生 | 🔵 | **Fixed** | §1 状态行已收实况：§2 文件 §1:6「**状态行**：进行中（任务书就绪；设计评审批次 1 = changes-required（1🔴·6🟡·5🔵）；裁定后 10 条要改（修复轮已派）、2 条主包AI 已修（文档地图登记 · §1 收成实况））」，原 `<§1 模板占位：…>` 行已移除（第 7–8 行为空行、第 9 行直接进入 `### §1 讨论与来源（主包AI）`），三条父侧裁定仍在 §1:13-16。 |
+| 12 | 读数口径（数字漂移） | 🔵 | **Fixed** | P1 §2:178 补「**读数口径**：§1 记的「成品约 106MB」为**未含随包浏览器**的首次冒烟读数（`docs/batches/b4-package-ship.md:18`），随包后应显著高于 120MB（主判 = 上列文件清单；体积作「随包浏览器是否遗漏」的辅助排查）」。 |
+| 13 | 清晰度 / 验证面（新） | 🟡 | **New** | `productName` 只钉了产物名 / 可执行名，未钉**应用名 → userData 落点**。本批新增 §2:106「**`productName: 免费外包`**」，而运行期 userData 取自应用名：`src/main/index.mjs:99:   const userData = app.getPath('userData');`（grep `setName` 于 `src/**` 无命中，仅 `:23:   app.setPath('userData', path.resolve(process.env.FO_USER_DATA));` 的测试覆盖）；设计档与验收假定仍是 `free-outsource`：`docs/design/overview.md:165: - 位置：\`%APPDATA%\\free-outsource\\config.json\`（Electron \`app.getPath('userData')\`）；同目录 \`runtime.json\`、\`logs/\`。`、§2:188 M1-⑤「⑤ 卸载：安装目录清空、快捷方式移除、\`%APPDATA%\\free-outsource\\\` 保留」。包内 `package.json` 仍为 `"name": "free-outsource"`（`package.json:2`），而 `productName` 是否经打包进入应用名**未验证**（electron-builder 未安装于仓库——`package.json:21-23` 仅 `electron`；`node_modules/electron` 可读但其不定义打包行为）。段 B/D 用 `FO_USER_DATA` 隔离，另有 P1 只查文件名，故该差异不会被 P1–P5 捕获，只有 M1-⑤ 会暴露。建议：把「打包态 `app.getPath('userData')` 仍为 `%APPDATA%\\free-outsource\\`（否则显式钉住应用名 / userData 路径）」并入切分 1 的第 0 步构建实测与 P1 读数。 |
+| 14 | 文档状态（R7a；新） | 🟡 | **New** | §2 状态行仍写「上抛 1 项（Edge 界面控件，待用户裁定）；待主包AI 核验、用户批准）」（§2:22），但该两项状态已由 §4 改写：`§4:273: - **用户原话**：「批准；只在关键节点汇报」（2026-10-11 10:58）。` 与 `§4:275: - **附条件裁定（切系统 Edge 的入口）**：用户未另答 ⇒ 按主包AI 呈报的**默认 A** 推进`。属文档状态滞后（不阻塞，建议随本轮结论一并把 §2 状态行收成实况）。 |
+
+**计数**：🔴 0 · 🟡 2（新增）· 🔵 1（#10 残余）｜轮次 1 的 12 条：Fixed 10 · Accepted 1（#2）· Unfixed 1（#10，🔵 残余）。
+
+VERDICT: pass
+
 ## §4 用户批准（主 agent）
+
+### §4 用户批准（2026-10-11）
+
+- **用户原话**：「批准；只在关键节点汇报」（2026-10-11 10:58）。
+- **批准对象**：本批候选设计 = 本档 §2（T1–T6 条目表 · 文件计划（9 项 src + 配置 / 脚本）· 打包态/开发态两态对照 · 冻结面 · 3 份实施切分 · 验收 P1–P5 与人工 M1–M5 · 边界）+ **§1 三条父侧裁定**（三处打包态最小接线 / 出厂 `browser.channel` 默认改空 + 序约束 / F6.3 首启引导最小形态）+ **评审轮 1 的 10 条定点修复**（含 #1 初始页接缝、#6 进程映像硬断言）。
+- **附条件裁定（切系统 Edge 的入口）**：用户未另答 ⇒ 按主包AI 呈报的**默认 A** 推进——本批交付口径 = 「切系统 Edge = 配置文件手改 `browser.mode:'edge'` + 重启生效」（与 `mcp.port` 手改通道同列）；**「设置中可切」的界面控件本批不交付**，另立条目承接（台账行）。
+- **汇报模式**：用户要求「只在关键节点汇报」——评审结论 / 交付核验 / 收口三处汇报，过程细节合并报告。
+- **凭证**：设计评审轮 2（复审）通过后签发；凭证值不入档（运行时态）。
+
 ## §5 实施记录（eng-coder）
+**状态行**：实施完成（b4 两切分均已实施：切分 2 打包态运行期接线（见下第一节）+ 切分 1 打包链与随包资源（见下第二节）；终态 clean（内部审计 1 轮 + 代码评审 2 轮全 pass））
+
+
+
+### §5 实施记录 · b4 切分 2「打包态运行期接线」（eng-coder · 2026-10-11）
+
+**交付摘要**（文件集 = 8 改 + 2 新增；行数 = 读回实况，口径同设计档「行数」列）
+
+- 新增 `src/main/packaging.mjs`（26 行；计划 ~45）：纯函数 `resolveRuntimePaths({isPackaged, resourcesPath, execPath, appPath})` ⇒ `{packaged, hostScript, engineCwd, engineEnv, guidePath}`；**不 import electron**（仅 `node:path`）——入参由 Electron 侧 `src/main/index.mjs` 注入。
+- 新增 `src/main/runtime-file.mjs`（33 行）：越档外提计划的条件已触发（不拆 index.mjs 将 ~318 行 > 300 档）⇒ `writeRuntimeFile` / `removeRuntimeFile` 从 index.mjs **纯搬迁**（行为不变；runtime.json 路径状态由调用方 index.mjs 持有并清空）。
+- `src/main/index.mjs` 296 → **285**：main() 顶部注入四个 Electron 取值算 rt；EngineClient 传 `hostScript`/`cwd`/`extraEnv`；settings wiring 传 `guidePath`；MCP 启动块之后「首启（`config.firstRun`）⇒ `log.info('首次运行：打开设置窗口')` + `settings.openSettings('guide')`」；删除原 `__dirname`/`repoRoot`/`engineHostScript` 与两条 runtime.json 函数。
+- `src/main/engine-client.mjs` 291 → **297**（预算 ≤+6 ≤297 ✅）：构造器新增 `extraEnv`，并入 spawn env（置于 `...process.env` 与 `FO_*` 之后，空对象 ⇒ 零键 = 开发态不注入）；JSDoc 同步。
+- `src/main/config.mjs` 104 → **107**（预算 ≤+3 ✅）：`ConfigStore({…, firstRun = false})`；`loadConfig` 以 `missing` 传入（`firstRun === true` 归一）。
+- `src/main/config-schema.mjs` 205 → **206**：`DEFAULT_CONFIG.browser.channel` `'msedge'` → `''`（+1 行说明注释；只影响缺失键补齐）。
+- `src/settings/service.mjs` 293 → **295**（预算 ≤+6 ✅）：`createSettingsService` 新增 `guidePath = GUIDE_PATH` 注入（快照 `guide.path/available` 与 `resolveOpenPath('guide')` 三处改用注入值；service 仍纯 Node 面）。
+- `src/settings/wiring.mjs` 78 → **82**（预算 ≤+5 ✅）：透传 `guidePath`；`openSettings(initialPage)` 透传。
+- `src/settings/window.mjs` 170 → **173**（预算 ≤+8 ✅）：`open(initialPage?)`；新建窗口 `loadFile(PAGE_PATH, initialPage ? {query:{page:String(initialPage)}} : undefined)`；**已存在窗口 ⇒ 照旧显示/聚焦，不追溯换页**；未用 executeJavaScript。
+- `src/settings/renderer.js` 220 → **222**（预算 ≤+2 ✅）：`boot` 读 `URLSearchParams(location.search).get('page')`，按 `PAGES` 校验后 `setPage`；缺省/非法 ⇒ `workers`；无 `?page=` 时与 b2 完全一致。
+
+**依赖注入面（`src/main/packaging.mjs` 入参签名）**
+
+`resolveRuntimePaths({ isPackaged, resourcesPath, execPath, appPath })` —— Electron 侧取值 = `app.isPackaged` / `process.resourcesPath` / `process.execPath` / `app.getAppPath()`（`src/main/index.mjs:98-103`）；返回 `{ packaged, hostScript, engineCwd, engineEnv, guidePath }`：
+
+- 开发态（`isPackaged=false`）：`hostScript=<appPath>/src/engine/host.mjs` · `engineCwd=appPath`（仓库根）· `engineEnv={}`（不注入）· `guidePath=<appPath>/docs/guide/agent-onboarding.md`。
+- 打包态：`hostScript=<appPath>/src/engine/host.mjs`（asar 内）· `engineCwd=dirname(execPath)`（安装目录；asar 档根不可作 cwd）· `engineEnv={PLAYWRIGHT_BROWSERS_PATH:<resources>/ms-playwright}` · `guidePath=<resources>/guide/agent-onboarding.md`。
+
+**验收读数（命令 + 读数）**
+
+- 回归：`npm run verify:mcp` 1/1（1920ms）· `verify:engine` 3/3（24516ms）· `verify:runtime` 2/2（4952ms）· `verify:settings` 6/6（23349ms）；`node --test docs/batches/b1-core-loop.units.mjs` 27/27 · `b2-settings-ui.units.mjs` 35/35 —— 全绿。
+- 两态对照逐行自证（`.thincoder/tmp/b4-split2/packaging.selfcheck.mjs`，纯 Node）：四值两态断言 + `'msedge'`→`''`（显式 `edge/msedge` 存值保留）+ 引擎语义（chromium+空 channel ⇒ `channel=undefined` ⇒ 随包；edge ⇒ msedge）+ 首建标记（空目录 `true` / 有配置 `false` / 损坏 `false`）—— 全通过。
+- `extraEnv` 真实子进程探针（同目录 `engine-env-probe.mjs`）：打包态读数 `{"pbp":"R:\\resources\\ms-playwright","runAsNode":"1","userData":…,"cwd":…}`；开发态 `pbp=null` 且 `ELECTRON_RUN_AS_NODE` / `FO_USER_DATA` / cwd 契约不变。
+- 首启/无参直验（同目录 `app-firstrun.mjs`，借 b2 驱动面）：**A 首启**（空 userData、未设 `FO_OPEN_SETTINGS`）⇒ 激活页 `guide` ∧ URL `?page=guide` ∧ `[data-field=mcp-url]` == `runtime.json.url` ∧ `open-guide` 可用 ∧ 日志「首次运行：打开设置窗口」/「启动引擎子进程：<仓库>\\src\\engine\\host.mjs」/「引擎就绪」∧ `--quit` exit 0 ∧ runtime.json 已删 ∧ 默认交付目录快照前后一致（只读扫描 + 瞬时写探测，零落痕）；**B `FO_OPEN_SETTINGS`** ⇒ `search=""` ∧ `workers`（无「首次运行」行）；**C 二实例唤起**（关窗后）⇒ `search=""` ∧ `workers`。
+
+**决策透明表**
+
+| # | 决策点 | 取法 | 理由 / 依据 |
+|---|---|---|---|
+| 1 | 开发态 hostScript/cwd/guidePath 的推导源 | 由注入的 `appPath` 推导（dev = 仓库根），不再用模块相对 `repoRoot` | appPath 恒为「代码根」（dev=仓库根 / 打包=app.asar），单一表达式两态同形；等价性由 A 路径日志读数证明（`启动引擎子进程：D:\免费外包\free-outsource\src\engine\host.mjs`）。触发条件 = 启动契约 `electron .`（package.json main 指向本模块） |
+| 2 | 首启开窗时点 | MCP 启动块**之后**（服务就绪后）；且 `mcp.ok=false` 时同样开窗 | 按 T5「服务就绪后」；失败时指引页据实况显示「未启动 + 原因」（可辩护超集，非静默降级） |
+| 3 | `extraEnv` 传入方式 | 无条件传入（开发态 = `{}`） | 空对象展开零键 = 「开发态不注入」；接线更单一（无分支） |
+| 4 | runtime-file 外提 | 触发（有条件全量搬迁） | 按 §2 文件计划条件句；不拆则 index.mjs ~318 行 > 300 档 |
+| 5 | `firstRun` 语义 | 仅 ENOENT（读取/解析失败 ⇒ 非首建，不改写用户文件） | 按 T5「启动时 config.json 不存在」；损坏文件不覆盖用户文件是既有行为 |
+| 6 | 页名校验位置 | 只放渲染层（`PAGES` 唯一权威）；window.mjs 不复制枚举 | 单一权威（D3）；非法值回落 workers 已在渲染层兜底 |
+| 7 | 首启日志文案 | 逐字「首次运行：打开设置窗口」 | 按 T5；P2 段 D 断言「首次运行」行的唯一来源 |
+
+**审计与代码评审轮次与终态**
+
+- 内部偏离审计（read-only explore，**1 轮**）：结论 = **无代码偏离 / 无越界**（对照 T2–T5 + 两态对照 + 冻结面逐条；mtime 扫描确认仅本切分 10 文件被动；`test/**`、`docs/**`、打包配置/脚本未触）。文档面 3 条滞后（文件计划回调 / `docs/README.md` 状态列 / `docs/design/overview.md:250` 措辞）——后两条属父侧文档层。
+- 内部代码评审（advisor · code，**1 轮**，范围 = 本 10 文件 + 批次档/3 份设计档）：**VERDICT: pass**（0 🔴；2 🟡 文档面非阻塞；2 🔵 非阻塞）。**fix round = 0**（评审后未再改文件，评审对象保持冻结）。终态 = **clean**。
+- 响应表（4 条，均「接受 · 非阻塞 · 不改代码」）：①`runtime-file.mjs` 未列入 §2 新增表/切分 2 文件域 + 行数回调 + §5 空 ⇒ **本段即回调落点**（实际文件集与行数已记上方），§2/§6 的回调归文档层；②`docs/design/overview.md:250`「设置中可切」措辞与 §4:300 裁定（界面控件不交付、另立条目）⇒ 上抛父侧/设计层收口；③首启落页可被「窗口已存在」（`FO_OPEN_SETTINGS` 或首启期二实例唤起）抢先 ⇒ 按设计「不追溯换页」保持现状（行为合设计），**首启判据直验须不设 `FO_OPEN_SETTINGS`**；④`src/settings/service.mjs:267` 报错文案「（b4 随包后可用）」已过时 ⇒ 记录项，建议随下次触碰改写（不改逻辑）。
+
+**上抛项 / 记录项（供父侧收口处置）**
+
+1. **切分 3 · P2 段 D 驱动器陷阱**：`test/integration/settings.driver.mjs:68` 默认 `FO_OPEN_SETTINGS:'1'` ⇒ 段 D 若复用该驱动，窗口会先被接缝建成 `workers`，`guide` 断言必失败；需在段 D 显式清空该变量（本批 A 路径已如此处理，可照抄）。
+2. **切分 1 面待收口**：打包态 `app.getPath('userData')` / AUMID（`src/main/index.mjs:104` / `:112`）与 `productName: 免费外包` 的一致性（设计评审批次 2 #13；M1-⑤ 会暴露）——本切分不触打包配置，交切分 1/收口取证。
+3. **默认值改动的边界（披露）**：显式**非字符串** `channel`（null/数字）经 `pickString` 判非法后回退**新**默认 `''`（改前回退 `'msedge'`）——应用自写 config 恒为字符串；显式 `'msedge'` / `mode:'edge'` 存值保留（P4 已守门）。
+4. **临时产物**：`.thincoder/tmp/b4-split2/` 保留 4 个可复跑自证脚本（packaging.selfcheck / engine-env-probe / probe-child / app-firstrun）；生成数据（探针 json / 自证 userData）已清。
+
+**进程与端口清理**：全部直验与回归实例均以 `--quit`（或会话 kill/killAll）收尾；收尾核对 electron / node 残留进程 = 0；回归端口均为动态分配或隔离占位（占位端口已关）。
+
+### 切分 1「打包链与随包资源」（eng-coder · 2026-10-11）
+
+**交付摘要**：可安装 NSIS 安装包 + 随包资源落位。产物：`release/免费外包-0.0.1-setup.exe`（350,929,208B ≈ 334.7 MiB，MZ 头 4d5a）· `release/win-unpacked/` 齐 — `免费外包.exe`（246,302,208B）· `resources/app.asar`（12,026,382B，sha256 5c480f84afbb6db2…）· `resources/app.asar.unpacked/node_modules/{playwright,playwright-core}` · `resources/ms-playwright/{chromium-1248,chromium_headless_shell-1248,ffmpeg-1013,winldd-1007}`（无 `.links`）· `resources/guide/{agent-onboarding.md,agent-brief.md}`。`npx @electron/asar list`：2790 条，`probe|test|docs` 命中 0；asar 根 = `node_modules | package.json | src`。
+
+**第 0 步自证与验收读数（逐条）**
+- `npm run fetch:browsers` ⇒ EXITCODE=0（下载源 = 默认镜像候选 `cdn.npmmirror.com/binaries/playwright`；落 `chromium-1248/chrome-win64/chrome.exe`）；幂等复跑 EXITCODE=0。
+- `npm run dist` ⇒ EXITCODE=0（全量含 NSIS；见下「构建中断与合成」）；产物名 = `artifactName` 派生 `免费外包-0.0.1-setup.exe`；体积 ≥120MB ✓。
+- 打包态启动（剥 ELECTRON_RUN_AS_NODE、FO_USER_DATA 隔离空 userData）：`/healthz` 200 `{ok:true,version:0.0.1,port:17873,workers:[DeepSeek ready]}`；日志含「引擎就绪」（mode=chromium channel=null，适配器 deepseek）、「首次运行：打开设置窗口」；`--quit` ⇒ exit 0 ∧ runtime.json 已删。
+- **引擎 asar 直跑自证**（打包 exe 以 ELECTRON_RUN_AS_NODE 直跑 asar 内 host.mjs）：`engine.health` ok=true、优雅退出 exit 0 ⇒ 切片风险表备选（asarUnpack `src/engine/**`）**不触发**。
+- userData 落点（评审 #13）：包内 `resources/app.asar/package.json` 实读 `"name": "free-outsource"` 且全文无 `productName`（electron.d.ts:1284-1293「应用名取 package.json，productName 优先」）⇒ 打包态 `app.getPath('userData')` 仍为 `%APPDATA%\free-outsource\`（与设计 §4 与 M1-⑤ 一致；旁证：该目录为真实数据目录、`%APPDATA%\免费外包` 不存在）。未做无隔离实跑（测试纪律：不碰真实 %APPDATA%）。
+- `.gitignore` 实读含 `.playwright-browsers/`（:7）与 `release/`（:4）。
+
+**构建中断与合成（透明披露）**：`.links` 卫生修复后重跑构建时，electron-builder 原地清理阶段 EBUSY —— 实测锁定者 = 本 agent 宿主进程（ThinCoder.exe pid 3756）持有的 asar 读句柄（共享模式含读/写、不含 FILE_SHARE_DELETE ⇒ 文件可写不可删）。处置（非破坏、未动宿主）：同一 `npm run dist` + `--config.directories.output=.thincoder/tmp/release2` 重建 ⇒ EXITCODE=0 ⇒ 新产物就地合成入 `release/`（app.asar 两边 sha256 逐字节一致 ⇒ 保留原文件对象；树级校验 819 文件（名+大小）一致）⇒ 清理 release2。**注意：本会话内再跑 `npm run dist` 会复现 EBUSY（旧句柄在宿主进程存活期间不释放）；会话重启后恢复常态。** 合成后全量复验（P1 逐项 / asar 抽查 / 两探针）全过。
+
+**审计与评审轮次**：① 内部 explore 只读审计 —— 代码/产物面 **clean，0 需修项**（两处已知偏差核实属实：chrome-win64 布局、体积）；② advisor 代码评审轮 1 —— **VERDICT pass**（2🟡 非阻塞 + 5🔵）；③ 修复轮（评审 #2/#3/#4 定点修复：下载源优先级与读数 / 信号终止读数 / `.links` 随包剔除）⇒ advisor 复核轮 2 —— **VERDICT pass**（终态 clean）。
+
+**上抛项（交父侧）**
+- 验收文字 `chromium-*/chrome-win/chrome.exe` 与 playwright 1.64 实况 `chrome-win64/chrome.exe` 不符（P1 与切分 3 段 A 断言须按实况书写，或按 `chromium.executablePath()` 解析）；文档层修正归父侧。
+- 体积实测 334.7 MiB（>「预期 150–250MB 级」；硬断言 ≥120MB 通过）：成因 = `install chromium` 一并随包 `chromium-headless-shell`（browsers.json 两者 installByDefault=true）+ ffmpeg + winldd；收敛选项 = `--no-shell`（代价：headless 模式无随包运行时）——待父侧裁定。
+- `verify:pack` 指向的 `test/integration/pack.test.mjs` 属切分 3（当前不可运行，按计划）。
+
+**越界声明**：① 创建 `scripts/fetch-browsers.mjs`（工程工具面，未列入 files 声明；父侧已授权）；② `package-lock.json` 因新增 devDependency electron-builder 被 npm 机械更新；③ 其余改动均在声明文件域内（`electron-builder.yml` / `package.json` / `build/icon.ico` / `.gitignore`）。未动 `src/**`、`test/**`、`docs/batches/**`、MCP/协议/调度语义；`release/` 与 `.playwright-browsers/` 为 gitignore 内约定产物目录，仓库根无游离临时件（临时件均在 `.thincoder/tmp/`）。
+
+**行数回调（设计「文件计划」估算 vs 实际）**：`scripts/fetch-browsers.mjs` 85 行（估算 ~40；含修复轮增量）；`electron-builder.yml` 62 行（≈60 ✓）；`.gitignore` 19→22（+3：条目+说明行+空行；预算 +1）；`package.json` 24→31（预算 ~37 ✓）。
+
+**进程 / 端口清理**：178xx / 59xxx–60xxx 无残留监听；无 `免费外包.exe` / electron 残留进程（tasklist + CIM 路径扫描双查；`findstr 中文` 在本机失效，已改用 UTF-8 感知法核验）。
+
 ## §6 验证与收口（父代理）
+
+### b4 收口（2026-10-11）
+
+**收口检查（D7 结算同步）**
+- **三切分交付**：切分 2（#53 运行期接线）· 切分 1（#54 打包链与随包资源）· 切分 3（#55 测试与验收面）。**切分 3 的 coder 在写完测试件（段 A–D 四件 + 驱动 + 会话件 + 随批单元件）后因模型账户余额耗尽（402 Insufficient Balance）中断**，未完成「清单转正」一项 —— 该项由**主包AI 直做**（见下）。
+- **父侧验收（主包AI 亲跑，不采信自述）**：`npm run verify:pack` **4/4（段 A–D 全绿）** · 随批单元件 **7/7** · b1 单元 **27/27** · b2 单元 **35/35** · `verify:mcp` 1/1 · `verify:engine` 3/3 · `verify:runtime` 2/2 · `verify:settings` **6/6**（同一轮连跑时曾出现一次 5/1 偶发，重跑即绿 ⇒ 已开台账 **#22** 记之）· **`verify:loop` 真机 1/1**。
+- **产物读数**：`release/免费外包-0.0.1-setup.exe` **334.7 MiB**（350,929,208 B）· `win-unpacked` 819 文件 · `app.asar` 12.0 MiB（含 `src/` 与 `node_modules`；`npx @electron/asar list` **0 命中** `probe|test|docs`）· `resources/ms-playwright` 718 MiB（含随带 `chromium-headless-shell`）。
+- **第 0 步自证**：`npm run fetch:browsers` exit 0（幂等两跑）· `npm run dist` exit 0 · **引擎 asar 直跑 `engine.health` ok=true** ⇒ 「切片风险」表的 asarUnpack 备选**不触发** · 打包态启动 `/healthz` 200 ∧ 日志「引擎就绪」∧「首次运行：打开设置窗口」∧ `--quit` exit 0 ∧ `runtime.json` 已删。
+- **评审关切结清**：评审 #13（`productName` 是否改动应用名）⇒ 包内 `package.json` 实读无 `productName` ⇒ `app.getPath('userData')` **仍为** `%APPDATA%\free-outsource\` ✓（与设计档 §2.3 及 M1-⑤ 假设一致）。
+- **实测回调（主包AI 直改 · 机械/计数/坐标 · 可回退）**：P1 的 `chrome-win` → **`chrome-win64`**（playwright 1.64 实况布局）· P1 体积预期 150–250MB → **实测 334.7 MiB**（机器断言 ≥120MB 不变、**无上限**；收敛候选见台账 #21）· 文件计划行数回调（`electron-builder.yml` 62 · `packaging.mjs` 26 · `fetch-browsers.mjs` 85 · `index.mjs` **285**〈越档搬迁已执行〉· `config-schema.mjs` 206 · `.gitignore` 22）。
+- **清单转正（主包AI 直做，此处明示）**：`docs/batches/b4-package-ship.checklist.md`——原属切分 3 交付项，因该 coder 账户余额中断未落；由主包AI 依外包草案转正 + 补实测订正（`release/` 输出目录 · 334.7 MiB · `chrome-win64` · 宿主持句柄时的 EBUSY 重建法）+ 新增「首启引导」段与失败读数栏。**已按文档地图规则登记**（`docs/README.md`，结清评审 #10 残余）。
+- **本批缺陷与修复**：无代码级回滚；内部评审合计 3 轮（切分 1：轮 1 pass → 3 处定点修复 → 轮 2 pass；切分 2：1 轮 pass、0 fix round）。
+- **人工场景 M1–M5（待操作者）**：真换机安装（**无 Node 机器**）· 卸载残留 · 首启引导 · 托盘三入口 · 清单逐条 —— 承载文件 = `docs/batches/b4-package-ship.checklist.md`（含失败读数栏）；本机替代判据 P3 已过。
+- **台账**：#6 本批覆盖并核销；新增 **#21**（`--no-shell` 体积收敛候选）· **#22**（`verify:settings` 偶发抖动）。
+- **暂缓批复核**：无。
+
+**冻结**：本记录自「已收口」状态行起冻结，此后不再回改；后续工作另立批次。

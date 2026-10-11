@@ -18,7 +18,7 @@ import { exportFragments, exportDirFor } from './export.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 
-/** 「打开随包文档」开发期落点（b4 打包后 = 安装目录 `guide/agent-onboarding.md`） */
+/** 「打开随包文档」缺省落点 = 开发期仓库路径（打包态由 wiring 注入安装目录 `guide/agent-onboarding.md`；见 src/main/packaging.mjs） */
 export const GUIDE_PATH = path.join(repoRoot, 'docs', 'guide', 'agent-onboarding.md');
 
 /** 端口不可用时的建议文案（与 docs/design/overview.md §2.3 同源） */
@@ -29,8 +29,9 @@ export const CHECK_STATUSES = ['ready', 'login_required', 'captcha', 'unavailabl
 
 /**
  * 创建设置服务。
- * @param {{config: object, scheduler: object, engine: object, log: object, userDataDir: string,
- *          version: string, getServiceInfo?: () => object, broadcast?: (snapshot: object) => void}} deps
+ * @param {{config: object, scheduler: object, engine: object, log: object, userDataDir: string, version: string,
+ *          guidePath?: string, getServiceInfo?: () => object, broadcast?: (snapshot: object) => void}} deps
+ *        guidePath = 「打开随包文档」落点（打包态由 wiring 注入 <resources>/guide/agent-onboarding.md；缺省 = 开发期仓库路径）；
  *        getServiceInfo = MCP 服务实况（{ok, url, port, reason}；未就绪 ⇒ 空对象）；
  *        broadcast = 窗口广播（配置变更 / 检查完成 / 回落发生时推全量快照）
  */
@@ -41,6 +42,7 @@ export function createSettingsService({
   log,
   userDataDir,
   version,
+  guidePath = GUIDE_PATH,
   getServiceInfo = () => ({}),
   broadcast = null,
 }) {
@@ -94,7 +96,7 @@ export function createSettingsService({
       },
       exportDir,
       logsDir,
-      guide: { path: GUIDE_PATH, available: fs.existsSync(GUIDE_PATH) },
+      guide: { path: guidePath, available: fs.existsSync(guidePath) },
       ops: PATCH_OPS,
     };
   }
@@ -261,10 +263,10 @@ export function createSettingsService({
       }
     }
     if (k === 'guide') {
-      if (!fs.existsSync(GUIDE_PATH)) {
-        return { ok: false, error: `随包文档不存在：${GUIDE_PATH}（b4 随包后可用）` };
+      if (!fs.existsSync(guidePath)) {
+        return { ok: false, error: `随包文档不存在：${guidePath}（b4 随包后可用）` };
       }
-      return { ok: true, path: GUIDE_PATH };
+      return { ok: true, path: guidePath };
     }
     return { ok: false, error: `未知路径类型：${JSON.stringify(kind)}（应为 outbox / export / logs / guide）` };
   }

@@ -10,9 +10,11 @@ import { DEFAULT_CONFIG, normalizeConfig } from './config-schema.mjs';
 export { CONFIG_VERSION, DEFAULT_CONFIG, normalizeConfig } from './config-schema.mjs';
 
 export class ConfigStore {
-  constructor({ file, config }) {
+  constructor({ file, config, firstRun = false }) {
     this.file = file;
     this._config = config;
+    /** 首建标记（T5 首启引导）：本次启动是否首次创建 config.json（loadConfig 判定；reload 不改变） */
+    this.firstRun = firstRun === true;
   }
 
   get current() {
@@ -92,7 +94,7 @@ export async function loadConfig({ userDataDir, log }) {
   }
   const { config, issues } = normalizeConfig(raw);
   for (const issue of issues) log?.warn(`配置校验：${issue}`);
-  const store = new ConfigStore({ file, config });
+  const store = new ConfigStore({ file, config, firstRun: missing });
   if (missing) {
     try {
       await store.writeFile();

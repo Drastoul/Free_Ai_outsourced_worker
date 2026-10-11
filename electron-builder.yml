@@ -1,0 +1,62 @@
+# 打包配置（b4·T1；设计权威：docs/design/overview.md §9 · 批次档 b4 §2）
+# 产物：release/免费外包-<version>-setup.exe（NSIS x64）+ release/win-unpacked/（未打包目录形态）
+appId: com.freeoutsource.app
+productName: 免费外包
+copyright: Copyright © 2026 免费外包
+
+directories:
+  output: release
+  buildResources: build
+
+asar: true
+asarUnpack:
+  - "**/node_modules/playwright/**"
+  - "**/node_modules/playwright-core/**"
+
+# 白名单：只随包运行所需（src 运行时代码 + 生产依赖）；探针 / 测试 / 文档 / 浏览器配置不入包
+files:
+  - "src/**"
+  - "package.json"
+  - "node_modules/**"
+  - "!probe/**"
+  - "!docs/**"
+  - "!test/**"
+  - "!.browser-profile/**"
+  - "!release/**"
+  - "!**/*.map"
+  - "!**/*.md"
+  - "!**/.github/**"
+  - "!**/.vscode/**"
+  - "!**/node_modules/.cache/**"
+
+# 随包资源：①④ 接入文档 → <资源目录>/guide/；随包 Chromium → <资源目录>/ms-playwright/
+extraResources:
+  - from: "docs/guide"
+    to: "guide"
+    filter:
+      - "**/*"
+  - from: ".playwright-browsers"
+    to: "ms-playwright"
+    filter:
+      - "**/*"
+      # playwright 的安装链接表（含构建机绝对路径）——运行时启动不读取，随包剔除
+      - "!.links/**"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: "${productName}-${version}-setup.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 免费外包
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true

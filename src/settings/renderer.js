@@ -198,7 +198,9 @@
       return;
     }
     bind();
-    setPage('workers');
+    // 初始页接缝（T5）：URL ?page=<name> 经 PAGES 校验；缺省 / 非法 ⇒ workers（无参数时与 b2 完全一致）
+    var page = new URLSearchParams(location.search || '').get('page') || '';
+    setPage(PAGES.indexOf(page) >= 0 ? page : 'workers');
     refresh();
     if (typeof fo.onChanged === 'function') {
       fo.onChanged(function (snap) {
