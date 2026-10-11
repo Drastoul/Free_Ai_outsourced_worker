@@ -204,7 +204,7 @@
     patchOp({ op: 'worker.remove', id: id }, function (res) { fail(res, '删除失败'); });
   }
 
-  /* ---------- 新增（T2：先选平台；清单来自快照——DeepSeek 可选 / Kimi 灰显「待支持」） ---------- */
+  /* ---------- 新增（T2：先选平台；清单来自快照——可用性由快照 available 决定） ---------- */
   function openAddDialog() {
     var platforms = (state.snapshot && state.snapshot.platforms) || [];
     if (!platforms.length) { notify('平台清单未知：请稍后重试（或检查主进程日志）', 'error'); return; }

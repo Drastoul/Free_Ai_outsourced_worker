@@ -16,10 +16,10 @@ export const PATCH_OPS = [
   'outbox.set',
 ];
 
-/** 平台清单：新增入口可见项（b1 仅 DeepSeek 已注册；Kimi 灰显「待支持」——设计 §2；b3 加适配器即加行） */
+/** 平台清单：新增入口可见项（加平台 = 加适配器 + 加行；b3 起 DeepSeek / Kimi 均已注册，均可选） */
 export const PLATFORM_CHOICES = [
   { id: 'deepseek', label: 'DeepSeek', available: true },
-  { id: 'kimi', label: 'Kimi', available: false, note: '待支持' },
+  { id: 'kimi', label: 'Kimi', available: true },
 ];
 
 const fail = (error) => ({ ok: false, error });

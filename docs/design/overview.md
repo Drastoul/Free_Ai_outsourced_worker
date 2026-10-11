@@ -295,6 +295,7 @@
 | 集成 | `npm run verify:mcp` | 契约面：initialize、tools/list 六件套、入参 schema、错误码路径、/healthz；文档断言（① `docs/guide/agent-onboarding.md`：四节 + R9 两节 +「本工具端点配置」节；④ `docs/guide/agent-brief.md`：五要素自述；内嵌 JSON 片段可解析 + 字段形状断言（`mcpServers` 对象形 + `url` 字段 / `config.json` 的 `mcp.servers` 数组形样例）；工具清单与 `tools/list` 对照） |
 | 集成 | `npm run verify:engine` | 浏览器引擎 + 下载捕获（CDP 自动落盘，本地 blob 页）+ 开关应用失败场景（本地 fixture 页；AC-R8-3）——不依赖平台登录 |
 | 集成 | `npm run verify:loop` | 真机端到端：派单 → 取答复 → 取件 → outbox 判据（含开关载荷核对 `manifest.toggles`；AC-R8-1；需登录态） |
+| 集成 | `npm run verify:loop:kimi` | 真机端到端（**第二平台 Kimi**；同一命令以 `FO_LOOP_PLATFORM=kimi` 参数化）：派单 → 取答复 → 取件 → outbox 判据；**按适配器 `capabilities` 条件断言**（下载捕获 / 开关能力位不具备 ⇒ 相应子步跳过）；AC-R3-1 / AC-R3-2 的 Kimi 侧（**AC-R3-4 的 Kimi 侧 = K5 探针读数 + 人工附件派单场景，不由本命令覆盖**） |
 | 集成 | `npm run verify:runtime` | 端点与端口：占用顺延 / 期望端口固定 / `runtime.json` 与探活（AC-R9-1；AC-R9-2 b1 侧；自控应用启停） |
 | 集成 | `npm run verify:settings` | b2 设置界面：窗口与四页签 / 外包工增删调序改名与启用 / **开关双读（config + 快照回显）** / 交付目录两段 / 实际地址与两形态复制（含未启动态） / 一键导出 / 关于页 / 检查动作预算 / 退出重启保留（AC-R5-1..6 · AC-R8-2 界面侧 · AC-R7-2 · AC-R9-1·2·4 界面侧；自控应用启停） |
 

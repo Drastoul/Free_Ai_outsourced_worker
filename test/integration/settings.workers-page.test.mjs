@@ -1,10 +1,11 @@
 /**
- * `verify:settings` 场景组 · 窗口与外包工页（a–g）+ 窗口关闭存活
+ * `verify:settings` 场景组 · 窗口与外包工页（a–g、h）+ 窗口关闭存活
  *
  * a 窗口与四页签（含关闭窗口后应用仍存活—/healthz 200）· b 新增 ⇒ config + `list_workers` / `/healthz` 双读（AC-R5-1）·
  * c 删除 + 二次确认（取消保留 / 确认移除；AC-R5-2）· d 调序 ⇒ config 与 `/healthz` 顺序随动（AC-R5-3）·
  * e 改名 + 旧名 `E_WORKER_UNKNOWN` 且不建任务（AC-R5-4）· f 开关 ⇒ config 与快照双读 + DOM 回显（AC-R8-2 界面侧，
- * 快照读面 = service.mjs 曾出缺陷处）· g 交付目录两段：非法拒绝且不落配置 / 合法落盘且界面显示实际路径（AC-R5-6 界面侧）。
+ * 快照读面 = service.mjs 曾出缺陷处）· g 交付目录两段：非法拒绝且不落配置 / 合法落盘且界面显示实际路径（AC-R5-6 界面侧）·
+ * h Kimi 可选且经 `worker.add` 落盘（b3 T3；平台行已可选，不再灰显）。
  *
  * 驱动 = `settings.session.mjs`（`_electron` 主路径，CDP 备选）；读数工具 = `settings.driver.mjs`。
  */
@@ -27,7 +28,7 @@ import { killAll, startSettingsApp } from './settings.session.mjs';
 
 after(killAll);
 
-test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录（AC-R5-1..4 · AC-R8-2 · AC-R5-6）', { timeout: 300000 }, async () => {
+test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录 + Kimi 落盘（AC-R5-1..4 · AC-R8-2 · AC-R5-6）', { timeout: 300000 }, async () => {
   const userData = freshUserData('workers');
   const port = await freePort();
   const outboxDir = path.join(userData, 'outbox');
@@ -77,8 +78,8 @@ test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录（AC-
     assert.ok(dlg.open, '新增对话框应打开');
     assert.deepEqual(dlg.platforms.map((p) => p.id), ['deepseek', 'kimi'], '平台清单 = 快照 platforms');
     assert.equal(dlg.platforms[0].disabled, false, 'DeepSeek 可选');
-    assert.equal(dlg.platforms[1].disabled, true, 'Kimi 灰显');
-    assert.ok(dlg.platforms[1].text.includes('待支持'), 'Kimi 标「待支持」');
+    assert.equal(dlg.platforms[1].disabled, false, 'Kimi 可选（b3 适配器已注册，不灰显）');
+    assert.ok(!dlg.platforms[1].text.includes('待支持'), 'Kimi 不标「待支持」');
     await session.click('[data-platform="deepseek"]');
     const added = await waitConfig(userData, (c) => c.workers.length === 3);
     assert.ok(added, '新增后 config.json 未出现新条目');
@@ -218,6 +219,26 @@ test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录（AC-
       '界面应显示新的实际交付目录',
     );
     console.log(`[verify:settings·g 读数] 非法⇒ok=${rejected.ok}（${rejected.error}）且 config.outboxDir 未变 · 合法⇒落盘=${goodDir} 界面显示=${path.resolve(goodDir)}`);
+
+    // ---- h：Kimi 经 worker.add 落盘（b3 T3 验收「Kimi 经 worker.add 落盘（设置面单测）」；平台行已可选）----
+    await session.click('[data-action="add-worker"]');
+    assert.equal(await session.waitDom(`document.querySelector('[data-add-dialog]').hidden === false ? 'y' : null`), 'y', '新增对话框应再次打开');
+    await session.click('[data-platform="kimi"]');
+    const withKimi = await waitConfig(userData, (c) => c.workers.some((w) => w.platform === 'kimi'));
+    assert.ok(withKimi, 'Kimi 新增未落盘');
+    const kimiWorker = withKimi.workers.find((w) => w.platform === 'kimi');
+    assert.equal(kimiWorker.name, 'Kimi', '默认名 = 平台名');
+    assert.equal(kimiWorker.enabled, true);
+    assert.deepEqual(kimiWorker.toggles, { thinking: false, search: false }, 'toggles 默认关');
+    const lwK = await mcp.call('list_workers', {});
+    assert.ok(!lwK.isError && lwK.data.workers.some((w) => w.id === kimiWorker.id), 'list_workers 应可见 Kimi 条目');
+    const hzK = await healthz(rt.port);
+    assert.ok(hzK.workers.some((w) => w.id === kimiWorker.id), '/healthz 应可见 Kimi 条目');
+    console.log(`[verify:settings·h 读数] Kimi 落盘=${kimiWorker.id}/${kimiWorker.name} platform=${kimiWorker.platform} toggles=${JSON.stringify(kimiWorker.toggles)} · list_workers=可见 · /healthz=可见`);
+    // 清理：删除该条目（保持与既有断言无耦合）
+    await session.click(`[data-worker-id="${kimiWorker.id}"] [data-action="delete"]`);
+    await session.click('[data-action="confirm-yes"]');
+    assert.ok(await waitConfig(userData, (c) => !c.workers.some((w) => w.id === kimiWorker.id)), '清理：Kimi 条目应可删');
 
     // ---- a 尾：关闭设置窗口 ⇒ 应用仍存活（/healthz 仍 200）----
     await session.closeWindow();

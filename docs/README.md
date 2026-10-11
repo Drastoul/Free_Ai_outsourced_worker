@@ -12,7 +12,7 @@
 | 架构设计 | `docs/design/overview.md` | 全项目架构、进程与 MCP 接入、配置、安全、打包、接入说明四载体、关键决策 K1–K13、b1 文件计划、验收体系 | 已批准（b1 已实施） |
 | 模块 · MCP 服务面 | `docs/design/modules/mcp-server.md` | 传输、六件套工具契约、错误码权威表 | 已批准（b1 已实施） |
 | 模块 · 调度 | `docs/design/modules/scheduler.md` | 状态机、选人、并发、重试降级、超时、取消 | 已批准（b1 已实施） |
-| 模块 · 适配器 | `docs/design/modules/adapters.md` | 适配器接口 + DeepSeek 首实现（流协议权威） | 已批准（b1 已实施） |
+| 模块 · 适配器 | `docs/design/modules/adapters.md` | 适配器接口 + DeepSeek / **Kimi** 实现（各平台流协议权威） | 已批准（b1 · b3 已实施） |
 | 模块 · 浏览器引擎 | `docs/design/modules/browser-engine.md` | 配置目录、启动参数、下载捕获、崩溃重启 | 已批准（b1 已实施） |
 | 模块 · 交付 | `docs/design/modules/outbox.md` | 目录结构、manifest、命名净化、上限 | 已批准（b1 已实施） |
 | 模块 · 设置界面 | `docs/design/modules/settings-app.md` | b2 设置窗口页面与交互 | 已批准（b2 已实施） |
@@ -20,7 +20,7 @@
 | AI 说明（随包） | `docs/guide/agent-brief.md` | R7④ 给 AI-Agent 的服务自述 | 已交付（b1） |
 | 批次档 b1 | `docs/batches/b1-core-loop.md` | 本批讨论 / 任务与设计 / 评审 / 批准 / 实施 / 收口记录（六段一作者） | 已收口 2026-10-09 |
 | 批次档 b2 | `docs/batches/b2-settings-ui.md` | 同上（b2 设置界面） | 已收口 2026-10-10 |
-| 批次档 b3 | `docs/batches/b3-kimi-adapter.md` | 同上（b3 接入第二个平台 Kimi） | 任务书就绪（待评审 / 批准） |
+| 批次档 b3 | `docs/batches/b3-kimi-adapter.md` | 同上（b3 接入第二个平台 Kimi） | 已收口 2026-10-11 |
 | 批次档 b4 | `docs/batches/b4-package-ship.md` | 同上（b4 打包与换机自适配） | 已收口 2026-10-11 |
 | 随批清单 b4 | `docs/batches/b4-package-ship.checklist.md` | 装机自检清单（换机验收执行件；含构建环境坑与失败读数栏） | 已交付（b4） |
 

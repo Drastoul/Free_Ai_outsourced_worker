@@ -12,7 +12,7 @@ import { baseConfig as base } from './b2-settings-ui.units.fixtures.mjs';
 // 七操作：清单 / 合法 / 非法（拒绝且不改传入配置）
 // ---------------------------------------------------------------------------
 
-test('patches：操作清单 = 冻结的七项；平台清单 = deepseek 可 / kimi 待支持', () => {
+test('patches：操作清单 = 冻结的七项；平台清单 = deepseek 可 / kimi 可（b3 落地）', () => {
   assert.deepEqual(PATCH_OPS, [
     'worker.add',
     'worker.remove',
@@ -24,7 +24,7 @@ test('patches：操作清单 = 冻结的七项；平台清单 = deepseek 可 / k
   ]);
   assert.deepEqual(
     PLATFORM_CHOICES.map((p) => `${p.id}:${p.available ? '可' : '待支持'}`),
-    ['deepseek:可', 'kimi:待支持'],
+    ['deepseek:可', 'kimi:可'],
   );
 });
 
@@ -52,7 +52,14 @@ test('worker.add：非法（未知平台 / 待支持平台 / 多余字段）', a
   const a = await applyPatch(cfg, { op: 'worker.add', platform: 'gpt' });
   assert.equal(a.ok, false);
   assert.match(a.error, /未知平台/);
-  const b = await applyPatch(cfg, { op: 'worker.add', platform: 'kimi' });
+  // 「不可用平台被拒」改由夹具临时注入承载（b3 已把 kimi 行转为 available:true；本批不动 src 行为）
+  PLATFORM_CHOICES.push({ id: 'gpt-x', label: 'GPT-X', available: false, note: '待支持' });
+  let b;
+  try {
+    b = await applyPatch(cfg, { op: 'worker.add', platform: 'gpt-x' });
+  } finally {
+    PLATFORM_CHOICES.pop();
+  }
   assert.equal(b.ok, false);
   assert.match(b.error, /待支持/);
   const c = await applyPatch(cfg, { op: 'worker.add', platform: 'deepseek', name: 'X' });

@@ -1,11 +1,12 @@
 /**
  * DeepSeek 适配器（`docs/design/modules/adapters.md` §2 接口 + §3 首实现）。
- * 本模块 = **适配器接口实现 + 纯函数**（流解析 / 载荷读键 / 代码块抽取）；
+ * 本模块 = **适配器接口实现 + 纯函数**（流解析 / 载荷读键）；代码块抽取引共享实现（`text-files.mjs`，D5）；
  * 页面操作机械（元素台账、开关五级兜底、输入 / 发送、DOM 兜底、下载按钮）在
  * `src/engine/adapters/deepseek-page.mjs`；SSE 解析纯函数在 `src/engine/adapters/deepseek-stream.mjs`。
  */
 import { defineAdapter, EngineError } from './base.mjs';
 import { parseSSE, matchStreamUrl } from './deepseek-stream.mjs';
+import { filesFromText } from './text-files.mjs';
 import {
   SELECTORS,
   TOGGLE_LABELS,
@@ -119,22 +120,8 @@ export default defineAdapter({
     },
   },
 
-  /** 取件层②：代码块 → 文件清单（纯函数；命名净化在落盘处执行，见 `docs/design/modules/outbox.md`） */
-  extract: {
-    filesFromText(text) {
-      const out = [];
-      const fence = /```([a-zA-Z0-9_+-]*)\r?\n([\s\S]*?)```/g;
-      let m;
-      while ((m = fence.exec(String(text ?? '')))) {
-        const lang = m[1] || 'txt';
-        const content = m[2];
-        const named = content.match(/^(?:#|\/\/|<!--)\s*file:\s*([^\s>]+)/i);
-        const name = named ? named[1].trim() : `code_block_${out.length + 1}.${lang || 'txt'}`;
-        out.push({ name, lang, content });
-      }
-      return out;
-    },
-  },
+  /** 取件层②：代码块 → 文件清单（共享纯函数 `text-files.mjs`；命名净化在落盘处执行，见 `docs/design/modules/outbox.md`） */
+  extract: { filesFromText },
 
   /**
    * 取件层①：点击代码块「下载」按钮触发真实浏览器下载（落盘由引擎的 CDP 自动落盘承担）。

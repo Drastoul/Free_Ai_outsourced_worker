@@ -3,6 +3,7 @@
  * 引擎按任务所属外包工的 `worker.platform` 取适配器；未注册的平台由调用方按 `E_WORKER_UNAVAILABLE` 处置。
  */
 import deepseek from './deepseek.mjs';
+import kimi from './kimi.mjs';
 
 const adapters = new Map();
 
@@ -23,3 +24,4 @@ export function listAdapters() {
 }
 
 registerAdapter(deepseek);
+registerAdapter(kimi);

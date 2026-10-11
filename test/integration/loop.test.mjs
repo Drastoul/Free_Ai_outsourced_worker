@@ -1,9 +1,11 @@
 /**
- * `npm run verify:loop` —— 真机端到端：派单 → 取答复 → 取件 → outbox 判据
+ * `npm run verify:loop` / `npm run verify:loop:kimi` —— 真机端到端：派单 → 取答复 → 取件 → outbox 判据
  *（AC-R3-1 / AC-R3-2：≤180s 内 done、manifest 终态、answer.md 非空、files/ ≥1、delivery.transport = "sse"；
  * AC-R8-1：manifest.toggles 的 payload 与 configured 一致；AC-R8-2 应用侧随动证据）
  *
- * 真机前提：`.browser-profile/` 内有 DeepSeek 登录态（探针期建立；**只读复用，不删不重置**）；
+ * 平台由 `FO_LOOP_PLATFORM` 选择（默认 `deepseek`：不带 env 时行为逐字同今日；`kimi` 走 `npm run verify:loop:kimi`）；
+ * 按适配器 `capabilities` 条件断言（下载捕获 / 开关能力位），口径与共享辅助件见同目录 `loop-helpers.mjs`。
+ * 真机前提：`.browser-profile/` 内有**所选平台**登录态（探针期建立；**只读复用，不删不重置**）；
  * 本命令自控应用启停（隔离 userData 落 .thincoder/tmp/verify-loop），跑完优雅退出。
  * 失败口径：平台侧波动（未登录 / 风控 / 网络）⇒ 原样给出读数并失败——不造假绿。
  */
@@ -15,6 +17,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { PLATFORM, workerName, capabilitiesOf, assertDeliveryOutcome, assertTogglesOutcome } from './loop-helpers.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -28,6 +31,9 @@ const WANT_TOGGLES = { thinking: true, search: false };
 const TASK_PROMPT =
   '请用一个 python 代码块输出一个最小文件：代码块第一行是注释 # file: verify_loop.py，第二行是 print("verify-loop-ok")。' +
   '代码块之外只回复两个字：完成。不要解释。';
+/** 选中平台（`FO_LOOP_PLATFORM`，默认 deepseek）· 外包工名 · 能力位（注册表取——条件断言据之分支） */
+const WANT_WORKER_NAME = workerName(PLATFORM);
+const CAPABILITIES = capabilitiesOf(PLATFORM);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn, timeoutMs = 60000, stepMs = 250) {
@@ -126,8 +132,8 @@ after(() => {
 
 // ---------------------------------------------------------------------------
 
-test('verify:loop —— 真机全链：派单 ⇒ 取答复（sse）⇒ 取件 ⇒ outbox 判据（≤180s）', { timeout: 360000 }, async () => {
-  assert.ok(fs.existsSync(PROFILE), `缺登录态目录 ${PROFILE}（需先人工登录一次 DeepSeek）`);
+test(`verify:loop[${PLATFORM}] —— 真机全链：派单 ⇒ 取答复（sse）⇒ 取件 ⇒ outbox 判据（≤180s）`, { timeout: 360000 }, async () => {
+  assert.ok(fs.existsSync(PROFILE), `缺登录态目录 ${PROFILE}（需先人工登录一次 ${WANT_WORKER_NAME}）`);
 
   const userData = path.join(TMP, 'app');
   fs.rmSync(userData, { recursive: true, force: true });
@@ -143,7 +149,7 @@ test('verify:loop —— 真机全链：派单 ⇒ 取答复（sse）⇒ 取件 
         browser: { mode: 'edge', channel: 'msedge', headless: false },
         outboxDir,
         workers: [
-          { id: 'w-1', platform: 'deepseek', name: 'DeepSeek', enabled: true, toggles: WANT_TOGGLES },
+          { id: 'w-1', platform: PLATFORM, name: WANT_WORKER_NAME, enabled: true, toggles: WANT_TOGGLES },
         ],
       },
       null,
@@ -232,24 +238,13 @@ test('verify:loop —— 真机全链：派单 ⇒ 取答复（sse）⇒ 取件 
     assert.equal(manifest.delivery?.textPath, 'answer.md');
     const answer = fs.readFileSync(path.join(taskDir, 'answer.md'), 'utf8');
     assert.ok(answer.trim().length > 0, 'answer.md 不得为空');
-    const fileNames = fs.readdirSync(path.join(taskDir, 'files'));
-    assert.ok(fileNames.length >= 1, 'files/ 应至少 1 个文件（下载捕获 / 代码块提取；AC-R3-1）');
-    // 文件清单契约（不锁平台侧命名：平台可能把代码块渲染为「文件/画布」⇒ 落盘名由下载建议名给出）
+    const filesDir = path.join(taskDir, 'files');
+    const fileNames = fs.existsSync(filesDir) ? fs.readdirSync(filesDir) : [];
+    // 取件判据（AC-R3-1）+ 按能力位条件断言（downloadCapture=false ⇒ 不得下载源、须有代码块源；见 loop-helpers.mjs）
+    const sources = assertDeliveryOutcome({ capabilities: CAPABILITIES, manifest, fileNames, taskDir });
+    // 开关载荷核对（AC-R8-1）：toggles=true ⇒ 载荷与 configured 一致；否则跳过载荷断言（§2 验收⑥）
+    const togglesReading = assertTogglesOutcome({ capabilities: CAPABILITIES, manifest, wantToggles: WANT_TOGGLES });
     const deliveryFiles = manifest.delivery?.files ?? [];
-    assert.equal(deliveryFiles.length, fileNames.length, 'manifest 文件清单应与 files/ 实况一致');
-    for (const f of deliveryFiles) {
-      assert.ok(f.name && f.relPath && f.bytes > 0 && /^[0-9a-f]{64}$/.test(f.sha256 ?? ''), `文件条目形状不完整：${JSON.stringify(f)}`);
-      assert.equal(path.dirname(path.join(taskDir, f.relPath)), path.join(taskDir, 'files'), `${f.name} 应落在 files/ 内`);
-      assert.ok(fs.existsSync(path.join(taskDir, f.relPath)), `${f.relPath} 应实际存在`);
-      assert.ok(['download', 'code_block'].includes(f.source), `取件层来源：${f.source}`);
-    }
-
-    // 开关载荷核对（AC-R8-1）：payload 与 configured 一致
-    assert.deepEqual(manifest.toggles?.configured, WANT_TOGGLES);
-    assert.ok(manifest.toggles?.payload, `未捕获请求载荷（toggles=${JSON.stringify(manifest.toggles)}）`);
-    assert.equal(manifest.toggles.payload.thinking_enabled, true, '载荷 thinking_enabled 应为 true');
-    assert.equal(manifest.toggles.payload.search_enabled, false, '载荷 search_enabled 应为 false');
-    assert.equal(manifest.toggles.ok, true, 'configured 与 payload 应一致');
 
     // —— fetch_result：文本与文件清单可取回 ——
     const fetched = await mcpCall(port, sessionId, 'fetch_result', { taskId });
@@ -260,10 +255,10 @@ test('verify:loop —— 真机全链：派单 ⇒ 取答复（sse）⇒ 取件 
     assert.equal(fetched.data.files.length, fileNames.length, 'fetch_result 文件清单应与 files/ 实况一致');
 
     console.log(
-      `[verify:loop 读数] taskId=${taskId} 任务时长=${(taskMs / 1000).toFixed(1)}s（timings）墙钟=${(elapsed / 1000).toFixed(1)}s ` +
+      `[verify:loop:${PLATFORM} 读数] taskId=${taskId} 任务时长=${(taskMs / 1000).toFixed(1)}s（timings）墙钟=${(elapsed / 1000).toFixed(1)}s ` +
         `phases=${phases.join('>')} manifest落盘滞后≈${manifestLagMs}ms transport=${manifest.delivery.transport} ` +
-        `files=[${deliveryFiles.map((f) => `${f.name}(${f.source},${f.bytes}B)`).join(',')}] ` +
-        `toggles=${JSON.stringify(manifest.toggles)}`,
+        `files=[${deliveryFiles.map((f) => `${f.name}(${f.source},${f.bytes}B)`).join(',')}] sources=[${sources.join(',')}] ` +
+        `toggles=${JSON.stringify(manifest.toggles)}${togglesReading ? '' : '（toggles=false ⇒ 跳过载荷断言）'}`,
     );
 
     const clean = await quitApp(app, userData);

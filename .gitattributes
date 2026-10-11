@@ -1,0 +1,7 @@
+# 行尾与保真策略（窄口径，针对逐字节 fixture）
+
+# b3 的答复流 fixture 须逐字节保真（含前导长度前缀与替换字符 U+FFFD）⇒ 禁行尾转换
+docs/batches/*.fixtures/*.txt -text
+
+# 期望值文件为人类可读派生文本 ⇒ 锁 LF，避免 CRLF 环境把断言打偏
+docs/batches/*.fixtures/*.md text eol=lf

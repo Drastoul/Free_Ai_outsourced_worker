@@ -122,3 +122,44 @@ export default {
 - 集成：`npm run verify:loop`（真机，`delivery.transport = "sse"`；`manifest.toggles` 载荷核对 = AC-R8-1）。
 - 集成：`npm run verify:engine` 开关失败场景（本地 fixture 页无 `div.ds-toggle-button` ⇒ 判 `E_SELECTOR_MISSING` 且未执行发送 = AC-R8-3）。
 - 对应需求验收：AC-R3-2、AC-R3-4、AC-R8-1、AC-R8-3。
+
+## 5. Kimi 第二实现（b3 落地；依据探针 7–13 与 15–18 真机读数）
+
+> 本节 = **Kimi 平台细节的权威落点**（与 §3 的 DeepSeek 同层级）；接口与通用规则仍见 §2。
+
+### 5.1 页面元素台账
+
+| 元素 | 定位方式 | 证据 |
+|---|---|---|
+| 输入框 | `.chat-input-editor`（contenteditable；输入前先清空） | `probe/out7` · `probe/out13` |
+| 发送 | 聚焦 + `insertText` + 发送按钮；**Enter 可作兜底**（实测触发 `ChatService/Chat`） | `probe/out16`（K3，6 轮一致） |
+| 新会话 | 文案「新建会话」元素（`div.action-label`，n=1）；**判据须按会话区**（body 级会被侧栏历史项名反证） | `probe/out16`（K4：`mainHas=false` / `bodyHas=true`） |
+| 附件 | `input[type="file"]`（multiple）+ `setInputFiles`；**界面只显词干**（全名不出现）且 `input.files` 上传后被清空 ⇒ 等待谓词用**词干**或 **upload 请求**（`/apiv2-files/file/upload`）；请求体走 `file.id` 引用 | `probe/out16`（K5） |
+| 登录态（两态互斥） | **ready** = `button.user-profile-trigger` 可见 ∧ 无 exact「登录」/「登录以同步历史会话」；**login_required** = 二者有其一（`button.user-info-container.user-area__main` / `button.next-sidebar-history-list__login`）；**「我的 Kimi」两态共有（各 5 个元素）⇒ 不得作 ready 依据** | `probe/out15`（K1） |
+| 下载 | **无下载按钮**（静态 / hover 后均无）⇒ `downloadCapture=false` | `probe/out18`（K7，4 轮一致） |
+| 答复容器 | `div.chat-content-item.chat-content-item-assistant` → `div.segment.segment-assistant` → `div.segment-container` → `div.segment-content` → `div.segment-content-box` | `probe/out18`（K9） |
+| 正文块 / 思考区 | 正文 = `div.paragraph` + `div.syntax-highlighter.segment-code-content`（嵌套 `pre.language-python` 须**去重**）；**思考区文本同为 `div.paragraph`** ⇒ 须排除 `[class*="toolcall-content"]` / `thinking-container` 并**按 DOM 序**采集；**不可按 `toolcall` 粗排除**（答案区同在 `toolcall-rollup` 下） | `probe/out18`（K9；`naive` 口径混入思考文本已验证） |
+
+- **空会话判据补充**：会话区容器不存在 ⇒ 按空会话判（首页空态）。
+
+### 5.2 收答复主通道（分帧 JSON 行流，非 SSE）
+
+- 响应体为**分帧 JSON 行流**；`stream.parse` 按帧内 JSON 对象扫描（`{"op":…}`）。
+- **两类帧形分别处理**：**SET 帧**（`"mask":"block.text"` / `"block.think"`，内容嵌在值内）⇒ **首帧快照必须计入正文与思考区**（丢首字先例见 §3 基线更正）；**append 帧**（`"mask":"block.text.content"` / `"block.think.content"`）⇒ 追加固有序内容。
+- **finished 判定顺序**：① `{"done":{}}` 帧出现 ⇒ finished（最高优先）；② 否则**仅助手消息**按 role / id 归并（system / user 消息同样带 `MESSAGE_STATUS_COMPLETED`，**不计**）；③ 无结束标记 ⇒ 抛 `E_STREAM_PARSE`。
+- **重复 SET 快照（同 `block.id` 二次快照）**：按追加处理（样本每 block 仅一次快照，未被证伪）。
+- 载荷读键（**仅供核对，本批未启用**）：`options.thinking` ↔ thinking；`tools` 含 `TOOL_TYPE_SEARCH` ↔ search。
+- 版本化 fixture 与期望基线：`docs/batches/b3-kimi-adapter.fixtures/`（`chat-resp.txt` 逐字节副本 + 期望正文/思考，**独立推导、不得用被测解析器生成**）。
+
+### 5.3 能力位（Kimi）
+
+| 位 | 值 | 依据 |
+|---|---|---|
+| `newChat` / `upload` / `streamCapture` / `codeBlockExtract` | `true` | K4 / K5 / K6 / K6 样本 |
+| `downloadCapture` | `false` | K7 无下载按钮 ⇒ 取件走层②③ |
+| `toggles` | `false` | K8：search 键可对齐，但 thinking 键无控件且 `options.thinking` 恒 true ⇒ 落 true 会让 `manifest.toggles.ok` 恒判 false（失真）；「按子键能力位」另批议 |
+| `requestPayloadCapture` | `false` | 同 `toggles` 口径（载荷不可核对则不假装可核对）⇒ `manifest.toggles.payload` 恒 `null` 属合法路径 |
+
+- **无开关能力的平台** ⇒ 引擎跳过应用与复核子步、配置值保留不报错（§3.8 末行口径）；该平台 AC-R8-1/2/3 不适用（需求档同口径）。
+- **已知不符（已记账）**：设置界面仍对 Kimi 渲染「深度思考 / 联网搜索」两开关并标「派单时自动应用」，与该能力位不符 ⇒ 收口/后续项。
+
