@@ -3,7 +3,7 @@
 > 编制：主 agent · 2026-10-11 · 来源 = 用户 2026-10-11 19:14「做」（回应主包AI 的「把这几个小项归一批收拾（#21–#28 + 打包刷新）」提议）+ 台账未决行 #17 / #23 / #24 / #26 / #28（#21/#22 的条件未满足；**#25/#27 已于 2026-10-11 19:25 由用户裁定并入本批** ⇒ §2 T6 / T7）+ 说明书更新（提交 f6ff0ef）需要重新打包才能进安装包。
 > 台账 = #28（免费外包 · 归批）。前情 = docs/batches/b5-session-reuse.md §6（已收口 2026-10-11）。
 ## §1 讨论（主 agent）
-**状态行**：🔄 进行中（…）
+**状态行**：已收口 2026-10-11（T1–T7 全部交付（切分 A 引擎面 #84 · 切分 B 设置面 #85 · T5 打包刷新父侧）并由父侧全套回归验收（b1 27 · b2 35 · b3 11 · b4 7 · b5 14 · b6 15 · verify:mcp 1 · engine 12 · runtime 2 · settings 6 · 真机 verify:loop 1 + verify:loop:kimi 1）；设计评审轮 1 pass + 两轮修复全处置；实施期真机抓到并修掉 Kimi 面板收起竞态缺陷；C1 取数命中（Kimi requestPayloadCapture=true，ok 只比受支持子键）；T5 经 release2 路线产包（350,943,899 B）并通过两条设计验收读数，verify:pack 段 A–D 因不可见文件锁挂账台账 #29；台账 #17/#23/#25/#26/#27/#28 已核销）
 <§1 模板占位：本批条目 / 关键判据 / 授权口径>
 
 ### §1 讨论与范围裁定（主包AI，2026-10-11）
@@ -432,3 +432,20 @@
 **fix round 2（评审轮 2 复核 + 收尾）**：advisor 轮 2 逐条复核三条 🔵 修复声明 ⇒ **Fixed ×3 · VERDICT: pass**（answer.mjs 空 `checked` ⇒ `ok:null`、kimi-toggles 打标前清同名旧标记、Escape 兜底后有界等待）；新增 🔵 一条（单元件头部「3 组」计数漂移）⇒ 已修（改「4 组」，与文件内 4 例对齐）；修后复跑 units **15/15**。终态 = **clean**（0 遗留 🔴 / 🔵 0；🟡 1 条为设计档随动，由父侧文档层持有）。
 
 ## §6 验证与收口（父代理）
+
+### b6 收口（2026-10-11）
+
+**收口检查（D7 结算同步）**
+- **T1–T7 全部交付**：切分 A（#84 引擎面：T2 / T4 / T6）· 切分 B（#85 设置面：T1 / T3 / T7）· T5 打包刷新（父侧直跑）。
+- **父侧验收（主包AI 亲跑——唯一一次仓库套件运行）**：b1 **27** · b2 **35** · b3 **11** · b4 **7** · b5 **14** · **b6 15** · `verify:mcp` 1 · **`verify:engine` 12** · `verify:runtime` 2 · `verify:settings` 6 · **`verify:loop`（DeepSeek 真机）1** · **`verify:loop:kimi`（真机）1**。
+- **关键读数**：Kimi 行 `[data-toggle]` **恰 1（search）** + 一行不支持提示 ✓；快照 `platforms[].toggles` 子键对象（DeepSeek `{true,true}` / Kimi `{false,true}`）✓；补丁 op **7→8**（`session.set`）+ 会话复用块**五锚点**齐备 + 非法回退不落盘 ✓；`manifest.toggles` 增 `checked` / `unsupported` 且 `ok` 只比受支持子键 ✓；**C1 取数命中 ⇒ Kimi `requestPayloadCapture = true`**，真机 `ok:true` · `checked:["search"]` · `unsupported:["thinking"]`（**不伪装绿**）✓；T2 中性化（两文件 `chat/completion` **0 命中**）✓；J3 文案断言与 J8 日志词随动 ✓。
+- **实施期真机缺陷（已修）**：Kimi 选项面板在点击后 ≈200–900ms **自行收起** ⇒ 读到陈旧 `aria-checked`（`E_SELECTOR_MISSING`）⇒ 修法 = 点击后有界等应用收起 + Escape 兜底 + 复核前重开 ✓（#84 真机诊断探针四段读数一致 ✓）。
+- **T5 打包刷新（部分挂账，如实记录）**：`release/win-unpacked/resources/app.asar` 被**不可见占用者**锁定（三次 `EBUSY`；`免费外包.exe` / `electron.exe` / `node.exe` 三个进程名过滤全空；目录改名 `EPERM`；自还原改名探针仍 `EBUSY`）⇒ 按 `docs/batches/b4-package-ship.checklist.md:14` 的**既有处置**改走 `.thincoder/tmp/release2` 重建路线 ✓：构建成功（161.5s，无 `EBUSY`）· 新安装包 **350,943,899 B（≈334.7 MiB）** 已摆到 `release/免费外包-0.0.1-setup.exe` ✓ · **两条设计验收读数均通过**：① 随包 `resources/guide/agent-brief.md` sha256 **== 仓库现行**（`cd6fe02b…`）⇒ 说明书新内容（`f6ff0ef`）已进包 ✓；② asar 内 **含** T2 新词、**不含**旧词 ⇒ 本批修复已进包 ✓；另抽查 asar 含 `session-policy` / `kimi-toggles` / `platform-capabilities` / `renderer-session` 四新件 ✓。**`verify:pack` 段 A–D 未跑**（其路径硬编码读 `release/win-unpacked`，被同一锁阻塞）⇒ **挂账台账 #29**（条件 = 锁释放 / 重启后 / 下次打包前）。
+- **本批缺陷与修复**：无回滚级缺陷。设计评审 2 轮（轮 1 **pass** + 两轮修复处置）· 实施侧：A 切分审计 1 轮 + 代码评审 2 轮 · B 切分审计 1 轮 + 代码评审 2 轮（均 pass，🔵 全部就地修）。
+- **父侧直改披露（可回退）**：需求档 3 行（`:233` / `:236` / `:282`）· 本档档头 1 行 + §2 残留 4 处 + 计数 1 处 · **b2 归档件 4 行**（跨批写门正确拒绝后由父侧承接）· `docs/design/modules/adapters.md` 2 处（C1 落值）。
+- **留下的 🟡 / 🔵**：无（评审 7 条全处置；实施侧 🔵 全修）。
+- **人工场景**：`verify:loop` 与 `verify:loop:kimi` 已覆盖两平台端到端 ✓；`verify:pack` 段 A–D 待锁释放（#29）。
+- **台账**：#17 / #23 / #25 / #26 / #27 / #28 已核销；新增 **#29**（`verify:pack` 补跑）。
+- **暂缓批复核**：无。
+
+**冻结**：本记录自「已收口」状态行起冻结，此后不再回改。
