@@ -10,6 +10,7 @@
 > - 2026-10-09 R9 与 R5·F5.7 追加落位：端点与发布面（期望 / 实际端口、`runtime.json` 字段清单、两形态接入片段与一键导出、说明文档 R9 两节、`verify:runtime`）与交付目录设置（实际路径解析 / 落点唯一性 / 不可用回落）。
 > - 2026-10-09 轮次 3 评审修复（P1–P10）：F9.6 / ③ 批次口径同源（生成 / 一键复制 / 一键导出随 b2）；期望端口写入通道（文件手改）与 ①「本工具端点配置」节；R8 引擎侧数据面（`task.run` 入参 `toggles` / 请求载荷捕获 / 回报形状）；端口顺延耗尽终局（MCP 服务不启动，不引入错误码）；`runtime.json` 生命周期（写 / 覆写 / 退出尽力删除）与 `pid` 判活；`verify:mcp` 文档断言对象写实 + 字段形状；AC-R8-2 日志落点；AC-R5-6 两段复现步骤。
 > - 2026-10-09 b2 落位：§2.1 二实例启动 ⇒ 唤起已运行实例（打开并聚焦设置窗口；2026-10-09 主包AI 裁定）。
+> - 2026-10-12 R11 落位（b7）：配置存储增 `workers[].url` / `workers[].driver`（自定义外包工，`platform='custom'`）；机制权威 = `docs/design/modules/adapters.md` §6。
 
 ## 1. 目标与范围
 
@@ -115,7 +116,7 @@
 2. 调度器选人（指定或优先级，见 `modules/scheduler.md`；不可选 ⇒ 同步拒绝、不建任务，见 `modules/mcp-server.md` §3.2）→ 建任务并写 outbox 初始 manifest（含 `worker` / `selection`）→ 经引擎客户端下发 `task.run`（忙碌时排队等待）。
 3. 引擎按外包工取浏览器上下文 → 打开页面并按会话复用判定（复用命中 ⇒ 沿用当前会话；未复用 ⇒ 新会话，见 `modules/browser-engine.md` §9）→ 检查登录态（不合格 ⇒ 报 `E_LOGIN_REQUIRED`）。
 4. 应用该外包工开关（`toggles`；失败 ⇒ `E_SELECTOR_MISSING`，不发送）→ 有附件则上传（`setInputFiles`）→ 发送任务文本（聚焦 + insertText + Enter）。
-5. 收答复：主通道拦截平台流式响应体解析全文，以流内结束标记判定完成；DOM 抓取为兜底（协议见 `modules/adapters.md`）。
+5. 收答复：主通道拦截平台流式响应体解析全文，以流内结束标记判定完成；DOM 抓取为兜底（协议见 `modules/adapters.md`）。自定义外包工（`streamCapture:false`）：不猜流、直走 DOM 通道并锚定本单回合（`modules/adapters.md` §6）。
 6. 取件三层：下载捕获（CDP 自动落盘）/ 回复内代码块提取 / 回复全文落盘（规则见 `modules/outbox.md`）。
 7. 引擎把产物写入 `<outbox>/<taskId>/`，返回结果清单（`delivery` + `toggles: {configured, payload, ok, checked, unsupported}`——`ok` 自 b6 起按**受支持子键**全等判定）→ 主进程据此写 manifest 终态（manifest 单一写者；字段语义见 `docs/design/modules/outbox.md`「manifest.json 与交付原子性」，捕获与核对机制见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）。
 8. 主包AI 经 `get_task` / `fetch_result` 取回文本与文件清单。
@@ -193,6 +194,8 @@
 
 - `limits.timeouts`：阶段超时（毫秒）——与 `docs/design/modules/scheduler.md`「阶段超时表」逐键对应；随 `limits` 立即生效。
 - `workers[].toggles`：外包工级开关（`thinking` / `search`，默认 `false`）——派单时应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」；界面呈现随 b2（`modules/settings-app.md`）。
+- `workers[].url` / `workers[].driver`：**自定义外包工（`platform='custom'`，R11 / b7）专用**——`url` = 网页版 AI 地址（http/https 绝对地址，必填；缺失 / 非法 ⇒ 该条隔离并记日志）；`driver` = 驱动参数三键（`inputSelector` / `sendButtonSelector` / `replySelector`，默认空串 = 通用启发式）。
+  内置平台条目不带这两键（手改带上 ⇒ 记 issue 丢弃）；机制权威见 `docs/design/modules/adapters.md` §6。
 - `mcp.port` / `mcp.host`：`port` = **期望端口**（重启生效；写入通道 = 文件手改、工具面无配置读写工具，实际监听端口与发布口径均见本文 §2.3）；`host` 固定 `127.0.0.1`（不提供跳网访问——R9 边界；非该值按非法配置处理：回退默认并记日志）。
 - `outboxDir`：交付目录——**实际路径**按交付策略解析（配置值不可用 ⇒ 回落），解析时点与落点唯一性见 `docs/design/modules/outbox.md`；界面显示实际路径（b2）。
 - `session`：会话复用策略（`reuse` 默认 `true`；`ttlMs` 空闲 TTL 默认 600000ms；`maxTasksPerSession` 默认 5）——机制权威见 `modules/browser-engine.md` §9；主进程透传口径同 `toggles`（`modules/scheduler.md` §10）；界面读写 = 设置界面外包工页「会话复用」块（b6；写路径 = 补丁操作 `session.set`，`modules/settings-app.md` §2 / §7）。

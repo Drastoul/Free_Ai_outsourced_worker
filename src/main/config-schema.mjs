@@ -78,6 +78,34 @@ function pickString(value, fallback, issues, label) {
 
 const MAX_INT = Number.MAX_SAFE_INTEGER;
 
+/** 自定义外包工（b7）驱动三键：空串 = 通用启发式，非空 = 该键覆盖（机制权威 = docs/design/modules/adapters.md §6） */
+const DRIVER_KEYS = ['inputSelector', 'sendButtonSelector', 'replySelector'];
+
+/** 自定义外包工 URL：http/https 绝对地址；缺失 / 非法 ⇒ null（调用方隔离该条并记 issue） */
+function pickCustomUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const u = new URL(value.trim());
+    return u.protocol === 'http:' || u.protocol === 'https:' ? value.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** driver 归一化（b7）：三键字符串、缺省回空串；非对象 / 未列键 ⇒ 记 issue（未列键丢弃） */
+function pickDriver(value, issues, label) {
+  if (value !== undefined && !isPlainObject(value)) {
+    issues.push(`${label} 非法（应为对象），回退空驱动`);
+  }
+  const src = isPlainObject(value) ? value : {};
+  for (const k of Object.keys(src)) {
+    if (!DRIVER_KEYS.includes(k)) issues.push(`${label}.${k} 不在驱动三键之内，已丢弃`);
+  }
+  const out = {};
+  for (const k of DRIVER_KEYS) out[k] = pickString(src[k], '', issues, `${label}.${k}`);
+  return out;
+}
+
 /**
  * 归一化：非法项回退默认并记一条 issue（调用方记日志，不静默丢）。
  * @returns {{config: object, issues: string[]}}
@@ -148,12 +176,26 @@ export function normalizeConfig(raw) {
         issues.push(`workers[${i}] id 重复（${id}），改用 ${id}-${i + 1}`);
         id = `${id}-${i + 1}`;
       }
+      let url = null;
+      let driver = null;
+      if (platform === 'custom') {
+        url = pickCustomUrl(w.url);
+        if (!url) {
+          issues.push(`workers[${i}] 自定义平台缺 url / 非法（须为 http/https 绝对地址），已隔离`);
+          return;
+        }
+        driver = pickDriver(w.driver, issues, `workers[${i}].driver`);
+      } else {
+        if (w.url !== undefined) issues.push(`workers[${i}].url 仅自定义平台可用，已丢弃`);
+        if (w.driver !== undefined) issues.push(`workers[${i}].driver 仅自定义平台可用，已丢弃`);
+      }
       const togglesSrc = isPlainObject(w.toggles) ? w.toggles : {};
       workers.push({
         id,
         platform,
         name,
         enabled: pickBoolean(w.enabled, true, issues, `workers[${i}].enabled`),
+        ...(platform === 'custom' ? { url, driver } : {}),
         toggles: {
           thinking: pickBoolean(togglesSrc.thinking, false, issues, `workers[${i}].toggles.thinking`),
           search: pickBoolean(togglesSrc.search, false, issues, `workers[${i}].toggles.search`),

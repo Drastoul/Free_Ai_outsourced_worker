@@ -4,6 +4,7 @@
 
 import { apiError } from '../mcp/errors.mjs';
 import { PHASES } from './task.mjs';
+import { toEngineWorker } from './workforce.mjs';
 import {
   DEGRADABLE,
   decideOutcome,
@@ -148,7 +149,7 @@ export class TaskRunner {
           'task.run',
           {
             taskId: t.taskId,
-            worker: { id: worker.id, name: worker.name, platform: worker.platform },
+            worker: toEngineWorker(worker),
             prompt: t.request.task,
             files: [...t.request.files],
             outboxDir: t.taskDir,
@@ -211,7 +212,7 @@ export class TaskRunner {
       retriesOnWorker,
       triedCount: triedWorkers.size,
       sawStreaming: !!sawStreaming,
-      nextWorker: this.workforce.nextAvailable(triedWorkers),
+      nextWorker: this.workforce.nextAvailable(triedWorkers, { requireUpload: (t.request?.files?.length ?? 0) > 0 }),
     });
   }
 

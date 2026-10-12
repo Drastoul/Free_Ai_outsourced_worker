@@ -133,4 +133,17 @@ code {
 .session-controls input[type="number"] { width: 96px; font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 .session-policy [data-field="session-error"] { color: var(--danger); }
 
+/* 自定义外包工（b7/T2）：新增表单 / 驱动参数对话框（字段标签 + 整宽输入 + 行内错误；红） */
+.custom-form .field, [data-driver-dialog] .field { display: block; margin: 0 0 8px; }
+.field > span { display: block; color: var(--muted); font-size: 12px; }
+.custom-form input[type="text"], [data-driver-dialog] input[type="text"] {
+  width: 100%; font: inherit; padding: 4px 6px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.custom-error { color: var(--danger); }
+/* 自定义行：提示与不支持能力标注各占一行（长文本整行换行，不挤行内控件） */
+.worker-note { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+/* custom 平台按钮：按钮内提示文本可换行（标签本身只写「自定义」） */
+.platform[data-platform="custom"] { flex-wrap: wrap; max-width: 100%; text-align: left; }
+
 [hidden] { display: none !important; }

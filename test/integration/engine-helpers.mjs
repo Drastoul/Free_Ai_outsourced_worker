@@ -97,9 +97,84 @@ function sessionPageHtml(search) {
     </body></html>`;
 }
 
+/**
+ * 自定义外包工 fixture 站（`engine.custom.test.mjs` 用；`docs/batches/b7-custom-workers.md` §2「验收对照」2）：
+ * 预置一条「上一单」回合（模拟会话复用残留）+ Enter / 按钮两种发送；发送 ⇒ 清空输入区 + 追加用户气泡（回声）+ 延迟追加本单回复。
+ * 回合容器 = `.message`（含 `data-message-author-role`），命中回复候选链第一项。
+ */
+function customPageHtml() {
+  return `<!doctype html><html><body>
+    <div id="chat"></div>
+    <div id="composer">
+      <textarea id="ta" placeholder="输入消息"></textarea>
+      <button id="send-btn">发送</button>
+    </div>
+    <script>
+      const chat = document.getElementById('chat');
+      const ta = document.getElementById('ta');
+      window.__foCustomSends = 0;
+      function appendTurn(role, text) {
+        const el = document.createElement('div');
+        el.className = 'message ' + role;
+        el.setAttribute('data-message-author-role', role);
+        el.textContent = text;
+        chat.appendChild(el);
+      }
+      function submit(via) {
+        if (!ta.value.trim()) return;
+        const text = ta.value;
+        window.__foCustomSends += 1;
+        const n = window.__foCustomSends;
+        ta.value = '';
+        appendTurn('user', text);
+        fetch('/custom-sent?via=' + via + '&n=' + n, { method: 'POST', body: text }).catch(() => {});
+        setTimeout(() => appendTurn('assistant', '自定义回复-' + n), 400);
+      }
+      appendTurn('assistant', '上一单回复（不应交付）');
+      ta.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        e.preventDefault();
+        submit('enter');
+      });
+      document.getElementById('send-btn').addEventListener('click', () => submit('button'));
+    </script>
+  </body></html>`;
+}
+
+/** 无输入区页（b7 R11-b）：打开后输入区候选链全未命中 ⇒ opening 判 `E_SELECTOR_MISSING` */
+const CUSTOM_NO_INPUT_HTML = `<!doctype html><html><body><h1>示例站点</h1><p>页面暂无输入区。</p></body></html>`;
+
+/** 无回复页（b7 R11-b / R11-c）：Enter ⇒ 清空 + 追加**非候选链**容器 `.bubble-item`（replySelector 可救） */
+const CUSTOM_NO_REPLY_HTML = `<!doctype html><html><body>
+  <div id="feed"></div>
+  <textarea id="ta" placeholder="输入消息"></textarea>
+  <script>
+    const ta = document.getElementById('ta');
+    ta.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      e.preventDefault();
+      const text = ta.value;
+      ta.value = '';
+      fetch('/custom-sent?via=enter', { method: 'POST', body: text }).catch(() => {});
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'bubble-item';
+        el.textContent = '非候选容器的回复';
+        document.getElementById('feed').appendChild(el);
+      }, 300);
+    });
+  </script>
+</body></html>`;
+
+/** 发送无反应页（b7 R11-d）：Enter 无任何处理（不清空、无新元素） ⇒ 6s 发送未确认 */
+const CUSTOM_STUCK_HTML = `<!doctype html><html><body>
+  <div id="chat"></div>
+  <textarea id="ta" placeholder="输入消息"></textarea>
+</body></html>`;
+
 /** fixture 页服务器：blob 下载页（正常名 / 穿越名）+ 无开关页（Enter 会真的提交，用作「是否发送」的观测点）+ 会话复用页与答复路由 */
 export function startFixtureServer() {
-  const state = { sent: 0, sentBodies: [], chatRequests: 0, hangRequests: 0, openSessions: 0 };
+  const state = { sent: 0, sentBodies: [], chatRequests: 0, hangRequests: 0, openSessions: 0, customSends: { enter: 0, button: 0 } };
   const pages = {
     '/dl-normal': `<!doctype html><html><body>
       <a id="dl" download="verify-dl.txt">下载</a>
@@ -119,6 +194,10 @@ export function startFixtureServer() {
         });
       </script>
       </body></html>`,
+    '/custom': customPageHtml(),
+    '/custom-noinput': CUSTOM_NO_INPUT_HTML,
+    '/custom-noreply': CUSTOM_NO_REPLY_HTML,
+    '/custom-stuck': CUSTOM_STUCK_HTML,
   };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -127,6 +206,13 @@ export function startFixtureServer() {
       const chunks = [];
       for await (const c of req) chunks.push(c);
       state.sentBodies.push(Buffer.concat(chunks).toString('utf8'));
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('sent');
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/custom-sent') {
+      const via = url.searchParams.get('via') ?? 'unknown';
+      state.customSends[via] = (state.customSends[via] ?? 0) + 1;
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('sent');
       return;

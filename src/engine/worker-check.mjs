@@ -12,8 +12,8 @@
  * 引擎不读配置、协议不传预算——`budgetMs` 仅为引擎侧内部缺省（= 引擎默认 opening 预算；自证脚本可传短值），
  * **尽力而为、不作硬上界**（浏览器启动不受其约束；硬上界 = 主进程的显式调用超时）。
  */
-import { getAdapter } from './adapters/registry.mjs';
-import { ensureOnPlatform, waitForLoginState } from './opening.mjs';
+import { adapterFor } from './adapters/registry.mjs';
+import { ensureOnPlatform, loginFailureError, waitForLoginState } from './opening.mjs';
 import { DEFAULT_TIMEOUTS } from './task-runner.mjs';
 import { remainingMs } from './util.mjs';
 
@@ -60,7 +60,7 @@ export async function checkWorker({ browser, runner, worker, log = () => {}, bud
     };
   }
 
-  const adapter = getAdapter(worker.platform);
+  const adapter = adapterFor(worker);
   if (!adapter) {
     log(`检查不可用：平台适配器未注册（platform=${worker.platform}）`);
     return { status: 'unavailable', detail: `平台适配器未注册：${worker.platform}` };
@@ -75,6 +75,14 @@ export async function checkWorker({ browser, runner, worker, log = () => {}, bud
     log(`打开平台页（${nav.via}）worker=${workerId} url=${page.url()}`);
     phase = '登录态判定';
     const state = await waitForLoginState(page, adapter, remainingMs(deadline));
+    // 「输入区未找到」类诊断（b7 loginFailure 钩子）⇒ unavailable + detail（徽标直读）；其余按既有映射
+    if (state !== 'ready' && state !== 'captcha') {
+      const diag = await loginFailureError(state, adapter, page);
+      if (diag.code === 'E_SELECTOR_MISSING') {
+        log(`检查完成 worker=${workerId} status=unavailable（${diag.message}）`);
+        return { status: 'unavailable', detail: diag.message };
+      }
+    }
     // 判定口径与 opening 阶段同源；未判定（超时 / 未知值）⇒ login_required（保守交人工，T6 边界）
     const status = state === 'ready' || state === 'captcha' ? state : 'login_required';
     log(`检查完成 worker=${workerId} status=${status}（窗口保留、未发送消息）`);

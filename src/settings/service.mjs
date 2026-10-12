@@ -2,7 +2,7 @@
 // 设计权威：docs/design/modules/settings-app.md（§2 外包工页 · §3 接入指引 · §5 交付目录 · §6 关于 · §7 配置同步）；
 // 冻结接口（批次档 b2 §2）——快照字段 ↔ 渲染层 DOM 契约：service.url↔[data-field=mcp-url] ·
 //   service.sseUrl↔sse-url · version↔version · outbox.actual↔outbox-actual · outbox.note↔outbox-note ·
-//   exportDir↔export-dir · logsDir↔logs-dir · workers[].toggles↔[data-toggle=thinking|search]（配置值，随外包工）；
+//   exportDir↔export-dir · logsDir↔logs-dir · workers[].toggles↔[data-toggle=thinking|search]（配置值，随外包工；custom 条目另带 url / driver——b7）；
 //   platforms[].toggles = [data-toggle] 的子键门控来源（b6/T3）· session.*↔[data-field=session-reuse|session-ttl-ms|session-max-tasks]（b6/T7）；
 //   fragments.* = 一键复制的两形态文本（生成器权威）。
 // 单写者 = 主进程：渲染层只经 IPC（preload → window.mjs 转发）调用本服务，不直接触达文件系统。
@@ -15,6 +15,8 @@ import { resolveOutboxDir, dirHasWriteAccess } from '../shared/outbox.mjs';
 import { applyPatch, PATCH_OPS } from './patches.mjs';
 import { buildPlatforms } from './platform-capabilities.mjs';
 import { buildSessionSnapshot } from './snapshot-session.mjs';
+import { buildWorkersSnapshot } from './snapshot-workers.mjs';
+import { toEngineWorker } from '../main/scheduler/workforce.mjs';
 import { buildFragments, stringifyFragment } from './fragments.mjs';
 import { exportFragments, exportDirFor } from './export.mjs';
 
@@ -61,6 +63,7 @@ export function createSettingsService({
   /** 只读快照（渲染层唯一读入口；页面打开与每次广播都取全量） */
   async function getSnapshot() {
     const cfg = config.current;
+    const workerList = scheduler.listWorkers(); // 与 cfg 同一同步步取齐（此后有 await，配置可能已换——两来源不得分取）
     const svc = getServiceInfo() || {};
     const running = svc.ok === true && !!svc.url;
     const frag = buildFragments({ host: '127.0.0.1', port: actualPort() });
@@ -82,13 +85,8 @@ export function createSettingsService({
         mcpJson: stringifyFragment(frag.mcpJson),
         mcpServers: stringifyFragment(frag.mcpServers),
       },
-      // workers 视图 = list_workers 词表（workforce.list()，不含 toggles）+ 该外包工的开关配置值（config.workers[].toggles；
-      // 兜底默认与 config-schema 的 workers[].toggles 同源——listWorkers() 即源于同一数组，故为不可达兜底）。
-      // toggles 只并入设置快照：list_workers（tools.mjs:89）与 /healthz（server.mjs:102）直取 scheduler.listWorkers()，不经此处。
-      workers: scheduler.listWorkers().map((w) => ({
-        ...w,
-        toggles: config.current.workers.find((x) => x.id === w.id)?.toggles ?? { thinking: false, search: false },
-      })),
+      // workers 视图（list_workers 词表 + 配置值；custom 条目另带 url / driver——见 snapshot-workers.mjs；list_workers / /healthz 直取 listWorkers()，不经此处）。
+      workers: buildWorkersSnapshot(workerList, cfg.workers),
       platforms: buildPlatforms(),
       session: buildSessionSnapshot(cfg.session),
       outbox: {
@@ -156,6 +154,8 @@ export function createSettingsService({
     }
     log.info(`配置已更新并落盘（${op?.op}）：${config.file}`);
     pruneWorkerHealth(op?.op);
+    // b7：改驱动参数 ⇒ 清该条目健康记录（scheduler.md §6「改完即重派」回路；与 pruneWorkerHealth 同一机制、目标不同）
+    if (op?.op === 'worker.setDriver' && typeof op.id === 'string' && op.id.trim()) scheduler.workforce?.clearHealth?.(op.id.trim());
     // 即时生效：外包工变动后让排队任务按既有复核语义处置（scheduler.md §5 出队复核）
     try {
       scheduler.pump();
@@ -183,7 +183,7 @@ export function createSettingsService({
     try {
       result = await engine.call(
         'worker.check',
-        { worker: { id: w.id, name: w.name, platform: w.platform } },
+        { worker: toEngineWorker(w) },
         { timeoutMs },
       );
     } catch (e) {

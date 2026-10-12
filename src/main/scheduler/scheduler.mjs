@@ -57,7 +57,7 @@ export class Scheduler extends EventEmitter {
   // ── 派单（建任务 + 写初始 manifest + 入队）────────────────────────────────
 
   async dispatch({ task, worker, files = [] }) {
-    const picked = this.workforce.pick(worker);
+    const picked = this.workforce.pick(worker, { requireUpload: files.length > 0 });
     const outbox = await resolveOutboxDir(this.config.current.outboxDir, { log: this.log });
     if (!outbox.dir) throw apiError('E_OUTBOX_WRITE', outbox.reason || '交付目录不可用');
     if (outbox.fallback) this.reportOutboxFallback(outbox);
@@ -115,7 +115,7 @@ export class Scheduler extends EventEmitter {
         error: apiError(code, `排队期间外包工不可用（${t.worker.name}）`),
       };
     }
-    const next = this.workforce.nextAvailable(new Set([t.worker.id]));
+    const next = this.workforce.nextAvailable(new Set([t.worker.id]), { requireUpload: (t.request?.files?.length ?? 0) > 0 });
     if (next) return { action: 'degrade', worker: next, code, reason: `排队期降级：${t.worker.name} 不可用（${code}）` };
     return {
       action: 'terminal',

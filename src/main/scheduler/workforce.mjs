@@ -1,8 +1,29 @@
-// 外包工名册：视图（list_workers / /healthz 词表）、健康与冷却、选人与降级候选。
-// 设计权威：docs/design/modules/scheduler.md §4（选人算法）/ §6（冷却）；docs/design/modules/mcp-server.md §3.1（词表）。
+// 外包工名册：视图（list_workers / /healthz 词表）、健康与冷却、选人与降级候选、引擎载荷（toEngineWorker）。
+// 设计权威：docs/design/modules/scheduler.md §4（选人算法）/ §6（冷却）/ §10（引擎载荷与附件能力门）；docs/design/modules/mcp-server.md §3.1（词表）。
 
 import { apiError } from '../mcp/errors.mjs';
 import { COOLDOWN_MS } from './policy.mjs';
+import { getAdapter } from '../../engine/adapters/registry.mjs';
+
+/** 送件能力位（归一化：缺项 / 未注册平台 ⇒ 不支持）——单一来源 = 适配器注册表（同 platform-capabilities.mjs 派生处；scheduler.md §10 b7） */
+function supportsUpload(platform) {
+  return getAdapter(platform)?.capabilities?.upload === true;
+}
+
+/** 附件能力门拒绝（b7；message 词形权威 = docs/design/modules/mcp-server.md §3.2——明示可用方向） */
+function uploadUnsupported(worker) {
+  return apiError(
+    'E_WORKER_UNAVAILABLE',
+    `该外包工平台不支持送件（附件）：${worker.name}（平台 ${worker.platform}）；请去掉附件后重派，或改派支持送件的平台`,
+  );
+}
+
+/** 引擎载荷（task.run / worker.check 的 worker 字段；scheduler.md §10 b7）：内置 = {id,name,platform}；custom 增 url / driver */
+export function toEngineWorker(w) {
+  const base = { id: w.id, name: w.name, platform: w.platform };
+  if (w.platform !== 'custom') return base;
+  return { ...base, url: w.url, driver: { ...(w.driver || {}) } };
+}
 
 export class Workforce {
   /**
@@ -168,8 +189,9 @@ export class Workforce {
   /**
    * 派单期选人：返回 {worker, mode, reason}；拒绝 ⇒ 抛 ApiError（同步拒绝、不建任务）。
    * 指定 = 硬绑定（不降级）；优先级路径 = 第一个健康者（即使正忙也选它，任务排队）。
+   * b7 附件能力门：`requireUpload`（带附件派单）时，显式指定无送件能力者 ⇒ 同步拒绝（不建任务、不置冷却）；优先级路径跳过（no-upload）。
    */
-  pick(specified) {
+  pick(specified, { requireUpload = false } = {}) {
     const workers = this.config.current.workers;
     if (specified !== undefined && specified !== null && String(specified).trim() !== '') {
       const w = this.match(specified);
@@ -185,6 +207,7 @@ export class Workforce {
       if (code) {
         throw apiError('E_WORKER_UNAVAILABLE', `外包工「${w.name}」当前不可用（指定为硬绑定，不降级）`);
       }
+      if (requireUpload && !supportsUpload(w.platform)) throw uploadUnsupported(w);
       return { worker: w, mode: 'explicit', reason: `指定「${w.name}」；健康` };
     }
 
@@ -200,17 +223,22 @@ export class Workforce {
         skipped.push(`${w.name}:${code}`);
         continue;
       }
+      if (requireUpload && !supportsUpload(w.platform)) {
+        skipped.push(`${w.name}:no-upload`);
+        continue;
+      }
       return { worker: w, mode: 'priority', reason: `优先级第 ${i + 1}；健康` };
     }
     throw apiError('E_NO_WORKER', `派单时无任何可用外包工${skipped.length ? `；跳过：${skipped.join('、')}` : ''}`);
   }
 
-  /** 降级候选：按数组顺序取下一个「未尝试过 ∧ 启用 ∧ 健康」的外包工 */
-  nextAvailable(tried) {
+  /** 降级候选：按数组顺序取下一个「未尝试过 ∧ 启用 ∧ 健康 ∧（带附件时）支持送件」的外包工 */
+  nextAvailable(tried, { requireUpload = false } = {}) {
     for (const w of this.config.current.workers) {
       if (tried.has(w.id)) continue;
       if (!w.enabled) continue;
       if (this.unavailableCode(w.id)) continue;
+      if (requireUpload && !supportsUpload(w.platform)) continue;
       return w;
     }
     return null;

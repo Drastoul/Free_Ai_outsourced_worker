@@ -1,13 +1,17 @@
 // 设置界面的配置变更纯函数与校验（b2；唯一写入口 = patch 清单）。
 // 设计权威：docs/design/modules/settings-app.md §2 / §5 / §7；操作清单与形状 = 批次档 b2 §2「冻结接口」
-//（b6 增补 session.set，见批次档 b6 §2「冻结接口」）：
-//   worker.add {platform} · worker.remove {id} · worker.rename {id, name} · worker.move {id, dir: up|down}
+//（b6 增补 session.set，见批次档 b6 §2「冻结接口」；b7 增补 worker.setDriver 与 worker.add 的 custom 分支，细节见 patches-custom.mjs）：
+//   worker.add {platform}（custom ⇒ {platform:'custom', name, url}，新增时不给 driver）
+//   · worker.remove {id} · worker.rename {id, name} · worker.move {id, dir: up|down}
 //   · worker.setEnabled {id, enabled} · worker.setToggles {id, toggles} · outbox.set {dir}
 //   · session.set {reuse?, ttlMs?, maxTasksPerSession?}（至少一键；部分更新）
+//   · worker.setDriver {id, driver:{≥1 键}}（部分更新、空串合法；仅 custom 条目）
 // 纯函数：不改传入配置（深拷贝后变更，返回新配置）；目录可用性以注入检查器判定（checkDir ⇒ Promise<boolean>）。
 // 校验失败 ⇒ {ok:false, error}（调用方弹错、不落配置）；成功 ⇒ {ok:true, config}（调用方原子写 + 广播）。
 
-/** 八操作清单（冻结；顺序即文档顺序；b6 增 session.set） */
+import { addCustomWorker, setDriver } from './patches-custom.mjs';
+
+/** 九操作清单（冻结；顺序即文档顺序；b6 增 session.set、b7 增 worker.setDriver） */
 export const PATCH_OPS = [
   'worker.add',
   'worker.remove',
@@ -17,12 +21,15 @@ export const PATCH_OPS = [
   'worker.setToggles',
   'outbox.set',
   'session.set',
+  'worker.setDriver',
 ];
 
-/** 平台清单：新增入口可见项（加平台 = 加适配器 + 加行；b3 起 DeepSeek / Kimi 均已注册，均可选） */
+/** 平台清单：新增入口可见项（加平台 = 加适配器 + 加行；b3 起 DeepSeek / Kimi 均已注册，均可选；
+ *  b7 增 custom 一行——label 只写「自定义」，「实验性」警示在提示文案与随包说明中，见批次档 b7 §4） */
 export const PLATFORM_CHOICES = [
   { id: 'deepseek', label: 'DeepSeek', available: true },
   { id: 'kimi', label: 'Kimi', available: true },
+  { id: 'custom', label: '自定义', available: true },
 ];
 
 const fail = (error) => ({ ok: false, error });
@@ -69,14 +76,18 @@ function uniqueId(workers) {
   return `w-${Date.now()}`;
 }
 
+/** 补丁通用小工具（自定义分支经参数注入复用；避免 patches ↔ patches-custom 循环引用） */
+const kit = { fail, pass, checkKeys, findWorker, requireId, uniqueId };
+
 // ---------------------------------------------------------------------------
-// 八操作
+// 九操作
 // ---------------------------------------------------------------------------
 
 function addWorker(next, op) {
+  const platform = typeof op.platform === 'string' ? op.platform.trim() : '';
+  if (platform === 'custom') return addCustomWorker(next, op, kit); // b7：自定义分支（{platform, name, url}）
   const extra = checkKeys(op, ['platform']);
   if (extra) return fail(extra);
-  const platform = typeof op.platform === 'string' ? op.platform.trim() : '';
   const choice = PLATFORM_CHOICES.find((p) => p.id === platform);
   if (!choice) {
     return fail(`未知平台：${JSON.stringify(op.platform)}；可选：${PLATFORM_CHOICES.map((p) => p.id).join(' / ')}`);
@@ -256,6 +267,8 @@ export async function applyPatch(config, op, { checkDir } = {}) {
       return setOutbox(next, op, checkDir);
     case 'session.set':
       return setSession(next, op);
+    case 'worker.setDriver':
+      return setDriver(next, op, kit);
     default:
       return fail(`未知操作：${name}`);
   }

@@ -23,6 +23,11 @@
 - **能力来源与回退**：快照 `platforms[].toggles`（主进程由适配器注册表派生并归一化，与引擎分支条件同源）；快照缺信息 / 未知平台 ⇒ 两子键按不支持渲染。
 - **会话复用块（b6）**：外包工页顶部「会话复用（全局）」块（锚点 `[data-field=session-policy]`；控件 `[data-field=session-reuse|session-ttl-ms|session-max-tasks]`）读写配置 `session` 键（机制权威 = `docs/design/modules/browser-engine.md` §9）。
   写路径 = 补丁操作 `session.set`（§7）；非法 / 越界输入不提交、输入回退快照值并以 `[data-field=session-error]` 行内提示；说明文案明示后果（复用 = 相邻任务共享上下文；出错 / 超时 / 取消后自动换新会话）。
+- **自定义外包工（b7，R11）**：新增对话框的平台清单增「自定义」项（`[data-platform="custom"]`；来源 = 快照 `platforms[]` 的 custom 行）；点选后在同一 `[data-add-dialog]` 内展开表单（`[data-custom-form]`；字段 `[data-field=custom-name|custom-url|custom-error]`；按钮 `[data-action=custom-submit|custom-back]`）。
+  名称（列表内唯一）与链接（http/https 绝对地址）由**服务端**校验，通过 ⇒ `worker.add`（custom 分支）落盘；失败 ⇒ 不提交 + 行内错误。
+  自定义行内：常显提示 `[data-field=custom-hint]`（含「实验性」与「可由你的主包AI 优化」）+「驱动参数」按钮（`[data-action=driver]`）⇒ 对话框 `[data-driver-dialog]`（三输入 `[data-field=driver-input|driver-send-button|driver-reply]`；行内错误 `[data-field=driver-error]`；保存 = 补丁操作 `worker.setDriver`，空串 = 通用启发式）。
+  自定义行内另立 `[data-field=custom-limits]`：如实标注四项不支持能力中的**送件（附件）/ 下载捕获 / 新建会话**（第 4 项「平台开关」由 `[data-field=toggles-unsupported]` 承载）——R11 边界「界面与随包说明如实标注」。
+  驱动参数机制与失败诊断见 `docs/design/modules/adapters.md` §6；**本工具不做自动优化**（F11.3）。
 - 状态检查：「打开并检查」按钮——打开 / 复用该外包工浏览器窗口到平台页，刷新登录态显示；未登录（`login_required`）时即**登录引导**：窗口留给人工完成登录，并明示「登录态只存本机，换机后每个平台需重新登录一次」（R9·F9.4）。
 - 交互规则：增删改序即时落盘（原子写）+ 即时生效；写入失败（占用 / 权限）弹错并回滚显示。
 
@@ -70,3 +75,4 @@
 - 复测：调序后 `list_workers` 顺序与实际选人随动（复测 AC-R4a-1）。
 - 开关的按子键门控与快照 `platforms[].toggles`（b6）：`npm run verify:settings` 断言——不受支持的子键不渲染对应开关且行内明示；快照 `platforms[].toggles`（`{thinking, search}` 子键对象）与适配器能力位一致（DeepSeek `{true,true}` / Kimi `{false,true}`）。
 - 会话复用块与 `session.set`（b6）：`npm run verify:settings` 断言——快照 `session` 三键 == config.json 值；非法输入不提交且值回滚；合法写落盘且快照双读一致。
+- 自定义外包工（b7）：`npm run verify:settings` 断言——`[data-platform="custom"]` 存在且可用；新增（名称 + 链接）⇒ `config.json` 落盘含 `url`、`list_workers` 可见；名称重复 / URL 非法 ⇒ 不提交且报错；`[data-field=custom-hint]` 文本含「实验性」与「主包AI」；`[data-field=custom-limits]` 文本含「送件（附件）」「下载」「新建会话」，且自定义行 `[data-field=toggles-unsupported]` 文本含「深度思考」「联网搜索」（四项不支持能力的界面如实标注）；驱动参数三键写读一致（AC-R11-1）。

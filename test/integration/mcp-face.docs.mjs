@@ -3,7 +3,8 @@
  *
  * 断言对象（设计权威：`docs/design/modules/mcp-server.md` §7「验收判据」文档断言；`docs/design/overview.md` §7 / §13）：
  *   ① `docs/guide/agent-onboarding.md`：四节（接入步骤 / 配置片段 / 工具清单 / 调用示例）
- *      + R9 两节（「换机后首次接入」「端点 / 端口变化后如何更新宿主配置」）+「本工具端点配置」节；
+ *      + R9 两节（「换机后首次接入」「端点 / 端口变化后如何更新宿主配置」）+「本工具端点配置」节
+ *      +「自定义外包工」节（b7/R11；正文由主包AI 落笔，本节只断言节存在）；
  *   ④ `docs/guide/agent-brief.md`：五要素自述（我是谁 / 我提供什么 / 怎么调用 / 出错怎么办 / 何时需要人来操作）；
  *   两份文档内嵌 JSON 片段可解析 + 字段形状（`.mcp.json` = mcpServers 对象形 + url；`config.json` = mcp.servers 数组形）；
  *   工具清单与 `tools/list` 对照（AC-R7-1 / AC-R7-3）；① 的 runtime.json 字段与实测键一致（AC-R9-4 文档侧）。
@@ -73,6 +74,7 @@ export function assertGuideDocs({ tools, runtimeJson }) {
     '换机后首次接入',
     '端点 / 端口变化后如何更新宿主配置',
     '本工具端点配置',
+    '自定义外包工', // b7/R11：第十节（正文由主包AI 落笔；本节断言 = 节结构存在——设计档 mcp-server.md §7）
   ]) {
     assert.ok(hasSection(onboarding, s), `agent-onboarding.md 缺小节：${s}`);
   }

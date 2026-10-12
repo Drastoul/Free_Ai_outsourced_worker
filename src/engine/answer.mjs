@@ -107,6 +107,7 @@ export async function collectAnswer(page, adapter, capture, timeouts, { isCancel
     await sleep(500);
   }
   if (transport === 'dom') {
+    const noStreamCap = note === 'no-stream-capability';
     let last = '';
     let stable = 0;
     while (Date.now() < totalDeadline) {
@@ -116,14 +117,37 @@ export async function collectAnswer(page, adapter, capture, timeouts, { isCancel
       else stable = 0;
       last = current;
       if (current && stable >= 3) break;
+      // 无流平台（b7 / §6.5）：「从未取到非空文本」到 streamFirstByteMs 即判 E_NO_RESPONSE（不空等到总超时）
+      if (noStreamCap && !last && Date.now() > firstByteDeadline) {
+        throw new EngineError('E_NO_RESPONSE', `发送后未观测到新回复（等待 ${timeouts.streamFirstByteMs}ms）${await domDiagnosis(adapter, page)}`);
+      }
       await sleep(2000);
     }
-    if (!last) throw new EngineError('E_NO_RESPONSE', '答复流未捕获，且 DOM 兜底未取到文本');
-    if (stable < 3) throw new EngineError('E_TIMEOUT', 'DOM 兜底文本未稳定（总时长超限）');
+    if (!last) {
+      throw new EngineError(
+        'E_NO_RESPONSE',
+        noStreamCap
+          ? `发送后未观测到新回复（等待 ${timeouts.streamFirstByteMs}ms）${await domDiagnosis(adapter, page)}`
+          : '答复流未捕获，且 DOM 兜底未取到文本',
+      );
+    }
+    if (stable < 3) {
+      throw new EngineError('E_TIMEOUT', `DOM 兜底文本未稳定（总时长超限）${noStreamCap ? await domDiagnosis(adapter, page) : ''}`);
+    }
     text = last;
     note = 'dom-stable';
   }
   return { transport, text, thinking, note };
+}
+
+/** DOM 采集诊断后缀（b7 / §6.5）：适配器可选提供 `dom.diagnose(page)`；引擎只拼接、不解析；缺失 / 失败 ⇒ 空串 */
+async function domDiagnosis(adapter, page) {
+  try {
+    const diag = typeof adapter?.dom?.diagnose === 'function' ? await adapter.dom.diagnose(page) : null;
+    return diag ? `+ 采集诊断：${String(diag).slice(0, 240)}` : '';
+  } catch {
+    return '';
+  }
 }
 
 /** 开关核对回报形状：`{configured, payload, ok, checked, unsupported}`（`docs/design/modules/adapters.md` §3.8；`ok` 只比**受支持子键**；未捕获载荷 / 无受支持子键 ⇒ `null`，不伪装绿） */

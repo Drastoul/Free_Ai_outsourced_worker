@@ -8,7 +8,7 @@
 import path from 'node:path';
 
 import { EngineError } from './adapters/base.mjs';
-import { getAdapter } from './adapters/registry.mjs';
+import { adapterFor } from './adapters/registry.mjs';
 import {
   applyTogglesWithLog,
   buildTogglesReport,
@@ -24,7 +24,7 @@ import {
   writeDeliverables,
   writeTextFile,
 } from './artifacts.mjs';
-import { ensureOnPlatform, waitForLoginState } from './opening.mjs';
+import { ensureOnPlatform, loginFailureError, waitForLoginState } from './opening.mjs';
 import { buildErrorReport } from './failure.mjs';
 import { SessionPolicy } from './session-policy.mjs';
 import { remainingMs, withDeadline } from './util.mjs';
@@ -136,7 +136,7 @@ export class TaskRunner {
     })();
     try {
       this.#throwIfCanceled(task);
-      adapter = getAdapter(worker.platform);
+      adapter = adapterFor(worker);
       if (!adapter) throw new EngineError('E_WORKER_UNAVAILABLE', `平台适配器未注册：${worker.platform}`);
 
       // ── opening：打开页面 → 登录检查 → 会话复用判定（未复用则新会话）→ 应用外包工开关（整体受 openingMs 预算约束）──
@@ -150,12 +150,7 @@ export class TaskRunner {
             const nav = await ensureOnPlatform(page, adapter, openingDeadline);
             this.log('task', `打开页面（${nav.via}）${page.url()}`);
             const loginState = await waitForLoginState(page, adapter, remainingMs(openingDeadline));
-            if (loginState === 'captcha') {
-              throw new EngineError('E_CAPTCHA_OR_RISK', '检测到验证码 / 风控线索：请在浏览器窗口人工处理，然后点托盘「我已处理（清除外包工冷却）」再重派');
-            }
-            if (loginState !== 'ready') {
-              throw new EngineError('E_LOGIN_REQUIRED', `登录态不可用（${loginState}）：请在打开的浏览器窗口完成登录，然后点托盘「我已处理（清除外包工冷却）」再重派`);
-            }
+            if (loginState !== 'ready') throw await loginFailureError(loginState, adapter, page);
             if (adapter.capabilities.newChat !== false) {
               const decision = this.sessionPolicy.decide({ workerId: worker.id, now: Date.now(), config: params.session, page });
               if (decision.reuse) this.log('task', `复用会话（taskCount=${decision.taskCount} idleMs=${decision.idleMs ?? 'n/a'}）`);
@@ -196,8 +191,13 @@ export class TaskRunner {
         await applyTogglesWithLog({ page, adapter, toggles, stage: '发送前复核', log: this.log });
       }
       await adapter.send(page, params.prompt, { log: (m) => this.log('task', m) });
-      await waitForSendConfirm(capture, timeouts.sendingMs);
-      this.log('task', '已发送（观测到答复流请求）');
+      if (adapter.capabilities.streamCapture === false) {
+        // 无流平台（b7）：发送确认由适配器 send() 自担（DOM 信号）；不空等 waitForSendConfirm（否则必误报 E_SEND_FAILED）
+        this.log('task', '已发送（无流平台，发送确认由适配器自担）');
+      } else {
+        await waitForSendConfirm(capture, timeouts.sendingMs);
+        this.log('task', '已发送（观测到答复流请求）');
+      }
       this.#throwIfCanceled(task);
 
       // ── streaming：流为主，DOM 兜底 ──

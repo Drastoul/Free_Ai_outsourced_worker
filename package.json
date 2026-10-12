@@ -11,7 +11,7 @@
     "app": "electron .",
     "probe:deepseek": "node probe/probe-deepseek.mjs",
     "verify:mcp": "node --test test/integration/mcp-face.test.mjs",
-    "verify:engine": "node --test test/integration/engine.test.mjs test/integration/engine.session.test.mjs",
+    "verify:engine": "node --test test/integration/engine.test.mjs test/integration/engine.session.test.mjs test/integration/engine.custom.test.mjs",
     "verify:loop": "node --test test/integration/loop.test.mjs",
     "verify:loop:kimi": "set FO_LOOP_PLATFORM=kimi&&node --test test/integration/loop.test.mjs",
     "verify:runtime": "node --test test/integration/runtime.test.mjs",

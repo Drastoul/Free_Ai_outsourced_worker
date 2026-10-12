@@ -1,8 +1,11 @@
 /* 免费外包 · 设置窗口渲染进程——外包工页（T2–T8）：行渲染与行内交互（改名 / 启用 / 开关 / 上移下移 / 打开并检查 / 删除二次确认）
  * + 新增选平台对话框。经典 script；共享工具与状态来自 window.FOUI（renderer.js，先加载）；零 Node 能力，只经 window.fo。
- * 冻结契约（批次档 b2 §2；b6 §2 增补）：行 [data-worker-id] · [data-field=name|enabled|status|checked] ·
+ * 冻结契约（批次档 b2 §2；b6 §2 · b7 §2 增补）：行 [data-worker-id] · [data-field=name|enabled|status|checked] ·
  *   [data-toggle=thinking|search]（按快照 platforms[].toggles 子键门控）· [data-field=toggles-unsupported]（不受支持子键提示行）·
  *   [data-action=up|down|delete|check]；确认框 [data-confirm] + confirm-yes/no；render() 兼挂会话复用块（FOUI.session）。
+ * b7/T2 委托（本文件只接线、细节在 renderer-custom.js）：custom 平台行按钮 ⇒ FOUI.custom.openForm（同对话框内展开表单）；
+ *   自定义行的附加元素（[data-field=custom-hint|custom-limits] · [data-action=driver]）由 FOUI.custom.decorateRow 构建；
+ *   custom 平台按钮处提示由 FOUI.custom.decoratePlatformButton 追加。
  */
 (function () {
   'use strict';
@@ -151,6 +154,8 @@
     li.appendChild(enable);
     li.appendChild(toggles);
     li.appendChild(actions);
+    // 自定义行附加元素（b7/T2；细节在 renderer-custom.js）——仅自定义行：内置平台行零变化（b7 冻结边界）
+    if (w.platform === 'custom' && api.custom && api.custom.decorateRow) api.custom.decorateRow(li, actions, w);
     return li;
   }
 
@@ -228,6 +233,7 @@
   function openAddDialog() {
     var platforms = (state.snapshot && state.snapshot.platforms) || [];
     if (!platforms.length) { notify('平台清单未知：请稍后重试（或检查主进程日志）', 'error'); return; }
+    if (api.custom && api.custom.resetForm) api.custom.resetForm();   // 每次打开从「选平台」开始（b7）
     var list = $('[data-platform-list]');
     list.textContent = '';
     platforms.forEach(function (p) {
@@ -236,12 +242,18 @@
       btn.setAttribute('data-platform', p.id);
       btn.disabled = !p.available;
       if (!p.available) btn.appendChild(el('span', 'platform-note', p.note || '待支持'));
-      btn.addEventListener('click', function () { addWorker(p); });
+      if (p.id === 'custom' && api.custom) {          // b7/T2：自定义 ⇒ 同一对话框内展开表单（不新开对话框）
+        api.custom.decoratePlatformButton(btn);
+        btn.addEventListener('click', function () { api.custom.openForm(); });
+      } else btn.addEventListener('click', function () { addWorker(p); });
       list.appendChild(btn);
     });
     $('[data-add-dialog]').hidden = false;
   }
-  function closeAddDialog() { $('[data-add-dialog]').hidden = true; }
+  function closeAddDialog() {
+    $('[data-add-dialog]').hidden = true;
+    if (api.custom && api.custom.resetForm) api.custom.resetForm();   // 关闭即复位（含自定义表单视图）
+  }
   function addWorker(p) {
     patchOp({ op: 'worker.add', platform: p.id }, function (res) { fail(res, '新增失败'); }).then(function (ok) {
       if (!ok) return;

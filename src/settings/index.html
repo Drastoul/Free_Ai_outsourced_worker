@@ -111,13 +111,43 @@
     </div>
   </div>
 
-  <!-- 新增外包工：选平台（T2；清单来自快照，不写死——可用性由快照 available 决定，不可用项灰显并带 note） -->
+  <!-- 新增外包工：选平台（T2；清单来自快照，不写死——可用性由快照 available 决定，不可用项灰显并带 note）
+       + 自定义外包工（b7/T2）：点「自定义」在同一对话框内展开表单（[data-custom-form]；不新开对话框）；
+       名称 / 链接由服务端校验（界面不做本地猜测：失败只回显 patch 结果、不提交） -->
   <div class="modal" data-add-dialog hidden>
     <div class="modal-body">
-      <p class="modal-text">新增外包工：选择平台（默认名 = 平台名，添加后可在列表内改名）</p>
+      <p class="modal-text add-intro">新增外包工：选择平台（默认名 = 平台名，添加后可在列表内改名）</p>
       <div class="platform-list" data-platform-list></div>
+      <div class="custom-form" data-custom-form hidden>
+        <p class="modal-text">自定义外包工：填写名称与链接（提交后即可派单）</p>
+        <label class="field"><span>名称（列表内唯一）</span><input type="text" data-field="custom-name" aria-label="自定义外包工名称" /></label>
+        <label class="field"><span>链接（网页版 AI 地址；http / https 绝对地址）</span><input type="text" data-field="custom-url" aria-label="自定义外包工链接" /></label>
+        <p class="hint custom-hint-text"></p>
+        <p class="hint custom-error" data-field="custom-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" data-action="custom-back">返回</button>
+          <button type="button" data-action="custom-submit">添加</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button type="button" data-action="add-worker-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 驱动参数（b7/T2；自定义外包工）：三键选择器（空串 = 通用启发式）；写入 = 补丁操作 worker.setDriver。
+       提示文案与表单 / 行内 / custom 按钮同源（.custom-hint-text 由 renderer-custom.js 注入） -->
+  <div class="modal" data-driver-dialog hidden>
+    <div class="modal-body">
+      <p class="modal-text driver-title">驱动参数</p>
+      <label class="field"><span>输入区选择器（driver.inputSelector）</span><input type="text" data-field="driver-input" /></label>
+      <label class="field"><span>发送按钮选择器（driver.sendButtonSelector；留空 = Enter 发送）</span><input type="text" data-field="driver-send-button" /></label>
+      <label class="field"><span>回复区选择器（driver.replySelector）</span><input type="text" data-field="driver-reply" /></label>
+      <p class="hint custom-hint-text"></p>
+      <p class="hint custom-error" data-field="driver-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" data-action="driver-close">关闭</button>
+        <button type="button" data-action="driver-save">保存</button>
       </div>
     </div>
   </div>
@@ -125,5 +155,6 @@
   <script src="renderer.js"></script>
   <script src="renderer-workers.js"></script>
   <script src="renderer-session.js"></script>
+  <script src="renderer-custom.js"></script>
 </body>
 </html>

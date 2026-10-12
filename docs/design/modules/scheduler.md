@@ -48,11 +48,13 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
       未命中        ⇒ 拒绝：E_WORKER_UNKNOWN（附可用名单）
       w 已停用      ⇒ 拒绝：E_WORKER_DISABLED
       w 不健康      ⇒ 拒绝：E_LOGIN_REQUIRED / E_WORKER_UNAVAILABLE（硬绑定，不降级；不建任务）
+      带附件 ∧ w 平台能力 upload !== true ⇒ 拒绝：E_WORKER_UNAVAILABLE（不建任务、不置冷却）
       return w
   else：
       for w in workers（按数组顺序）：
           if !w.enabled                  → 记录跳过(disabled)，继续
           if w 冷却中 / 不健康            → 记录跳过(reason)，继续
+          if 带附件 ∧ 平台能力 upload !== true → 记录跳过(no-upload)，继续
           return w        // 第一个健康者；即使它正忙也选它（任务在其队列排队）
       全部跳过 ⇒ 拒绝（不建任务）：E_NO_WORKER
 ```
@@ -60,6 +62,7 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 - **忙 ≠ 不可用**：高优先级外包工忙碌时任务**排队等待**，不换人（K6）。理由：「按优先级使用」的直读；避免静默换平台。
 - 上列「拒绝」= **同步拒绝、不建任务**；建任务 / 不建任务的边界与派单期错误码全集见 `docs/design/modules/mcp-server.md` §3.2。
 - 健康判据：最近一次健康检查 / 任务结果；`login_required`、`captcha_cooling`、`unavailable` 均视为不健康。
+- **附件能力门（b7）**：带 `files` 派单时，显式指定无送件能力者 ⇒ 同步拒绝；优先级 / 降级路径跳过该类候选（`requireUpload`）。判定口径见 §10（能力位取自适配器注册表归一化）——本节为选人算法本体，不复制口径。
 
 ## 5. 并发与排队
 
@@ -75,6 +78,8 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 | 瞬时（可重试） | `E_TIMEOUT` `E_NO_RESPONSE` `E_SEND_FAILED` `E_STREAM_PARSE` | 同一外包工重试 ≤ `retryPerWorker`（默认 2），退避 3s / 10s；耗尽 ⇒ failed |
 | 外包工不可用（可降级） | `E_LOGIN_REQUIRED` `E_CAPTCHA_OR_RISK` `E_SELECTOR_MISSING` `E_WORKER_UNAVAILABLE` | 该外包工置冷却（默认 10 分钟，或人工处理后清除——**载体 = 托盘菜单「我已处理（清除外包工冷却）」，粒度 = 全部外包工**）；任务转下一优先级；最多尝试 `maxFailoverWorkers`（默认 3）个外包工 |
 | 不可恢复 | `E_BAD_FILE` `E_BAD_ARGS` `E_OUTBOX_WRITE` | 不重试；直接失败（`E_OUTBOX_WRITE` 归 needs_human） |
+
+- **自定义外包工改驱动参数 ⇒ 清该条目冷却（b7）**：主进程应用 `worker.setDriver`（或 url / driver 任何变更）后**同步清除该条目健康记录**（`workforce.clearHealth(id)`；与设置服务的 `pruneWorkerHealth` 同一清除机制、目标不同——后者清已离册的陈旧 id）。理由：驱动参数不匹配属「预期首次失败」（F11.3 二次优化回路），照常置 10 分钟冷却会挡住「改完参数 ⇒ 立即重派」；清除后该条目即时回 `ready`。判据 = §11 单元 + 批次档 b7 §2 人工场景。
 
 - 降级只发生在**预热阶段**（打开 / 登录检查 / 发送前）；进入 streaming 后不再换人（避免重复消耗平台额度）。
 - **降级耗尽**（无下一可用外包工，或尝试数达 `maxFailoverWorkers` 上限）⇒ 终态 **needs_human**，错误码 = 最后一次尝试的错误码；b1 单外包工配置无下一优先级 ⇒ 直接落 needs_human。
@@ -109,6 +114,8 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 ## 10. 与引擎子进程的接口（摘要）
 
 - 逐行 JSON-RPC（stdio）：`engine.health`、`task.run({taskId, worker, prompt, files, outboxDir, toggles})`、`task.cancel({taskId})`；**`worker` = 对象 `{id, name, platform}`**（与 manifest / TaskView 同形：`id` 定位 `<userData>/profiles/<workerId>/`、`platform` 选适配器）；`toggles` = 该外包工配置值（`{thinking, search}`，**主进程传入**——引擎不自行读配置，保持单一事实源；应用与核对见 `docs/design/modules/adapters.md`「外包工开关的应用与核对」）；`session` = 会话复用策略值（`{reuse, ttlMs, maxTasksPerSession}`，同样**主进程传入**——缺省时引擎用同一套设计默认值；机制见 `modules/browser-engine.md` §9）。
+- **自定义平台的载荷与附件能力门（b7）**：`platform = 'custom'` 的 `worker` 另带 `url` / `driver`（逐键；由主进程 `workforce.toEngineWorker` 生成、缺省不出现；绑定见 `docs/design/modules/adapters.md` §6）；`worker.check` 的 `worker` 同形。
+  **附件能力门**：带 `files` 派单时，显式指定「平台能力 `upload !== true`」的外包工 ⇒ **同步拒绝** `E_WORKER_UNAVAILABLE`（不建任务、不置冷却）；优先级 / 降级候选跳过该类（`workforce.pick` / `nextAvailable` 的 `requireUpload`）——引擎 uploading 相位的既有拒绝仍是兜底。**能力位判定取自适配器注册表并归一化**（缺项 / 未注册平台 ⇒ 按「不支持送件」），与界面 `platforms[].toggles` 同派生处——**单一来源，不另立能力表**。
 - 引擎回报结果清单：`delivery` + `toggles: {configured, payload, ok, checked, unsupported}`（b6 起后两键；形状见 `docs/design/overview.md` §3.2 第 7 步）；**失败 = result 内 `error: {code, message, hint?} | null`**（与 manifest 的 `error` 同形；**JSON-RPC error 仅用于协议级 / 内部异常**，不承载业务失败）；失败时 `delivery` / `toggles` 可缺席（缺席 ⇒ 视为未产出，不得为凑字段造值）。
 - 进度事件：`{event: "task-progress", taskId, phase}`（供 `get_task` 展示）。
 - 引擎崩溃：主进程重启引擎并置进行中任务 `E_ENGINE_DOWN`（可重派）。
@@ -118,7 +125,8 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 
 ## 11. 验收判据
 
-- 单元（随批归档）：选人算法（优先级 / 硬绑定 / 忙排队 / 降级轨迹）、状态机转换、重试计数与退避、`E_SELECTOR_MISSING`（含开关应用失败）在 b1 单外包工配置下的降级与终态。
+- 单元（随批归档）：选人算法（优先级 / 硬绑定 / 忙排队 / 降级轨迹）、状态机转换、重试计数与退避、`E_SELECTOR_MISSING`（含开关应用失败）在 b1 单外包工配置下的降级与终态；b7 增：`requireUpload` 过滤与同步拒绝、`clearHealth` 健康清除语义（置冷却 ⇒ `statusOf` 回 `ready`）。
 - 集成：`npm run verify:loop`（真机全链）。
 - 集成（b5）：`npm run verify:engine` 含会话复用场景（连续两单复用 / TTL 到期换新 / 出错即换新 / 上限换新 / 禁用回退 / 取消即换新 / 复用 × DOM 兜底；见 `modules/browser-engine.md` §9）。
+- 集成（b7）：`npm run verify:engine` 含自定义外包工场景（happy path + 本单锚定 / 驱动缺失与不匹配的定位回执 / 驱动参数生效；见 `docs/batches/b7-custom-workers.md` §2）。
 - 对应需求验收：AC-R4a-1..3、AC-R4b-1..3、AC-R3-5、AC-R8-3（处置路径）。

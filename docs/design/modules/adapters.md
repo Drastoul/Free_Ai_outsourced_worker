@@ -1,6 +1,6 @@
 # 模块设计 · 外包工适配器（接口 + DeepSeek 首实现）
 
-> 职责：适配器接口（capabilities / 发送 / 收流 / 取件 / 健康检查）与 DeepSeek 首实现的页面与协议细节（**DeepSeek 流协议的权威描述**）。
+> 职责：适配器接口（capabilities / 发送 / 收流 / 取件 / 健康检查）与 DeepSeek 首实现的页面与协议细节（**DeepSeek 流协议的权威描述**）、Kimi 实现（§5）、自定义外包工的通用尽力驱动（§6；R11 / b7）。
 > 不在本文：调度与选人（`docs/design/modules/scheduler.md`）、浏览器实例与配置目录（`browser-engine.md`）、产物落盘规则（`outbox.md`）。
 
 ## 1. 边界
@@ -33,6 +33,9 @@ export default {
   extract: { filesFromText(text) },      // 代码块 → 文件清单（纯函数，可单测）
 };
 ```
+
+- **可选钩子（b7）**：`bindWorker(worker)`——按外包工生成派生实例（`custom` 用 `url` / `driver` 覆盖；其余适配器不实现 ⇒ 行为零变化）；`loginFailure(page)`——登录态判定的失败诊断（返回 `{code, message}` 或 `null`；`null` ⇒ 按既有 `ready` / `login_required` / `captcha` 映射）；`dom.diagnose(page)`——DOM 采集失败的诊断单行串（可选；仅拼接、不解析）。
+- **`streamCapture: false` 的发送确认口径（b7）**：无答复流可观测 ⇒ 引擎跳过 `waitForSendConfirm`，发送确认由该适配器 `send()` 自担（DOM 信号）；能力为 `true` 的适配器行为不变（仍以「观测到本任务答复流请求」为确认）。
 
 ## 3. DeepSeek 首实现（依据第 0 步探针实测，全部为真机证据）
 
@@ -168,4 +171,61 @@ export default {
 - **无受支持子键的平台** ⇒ 引擎跳过应用与复核子步、配置值保留不报错（§3.8 末行口径）；该平台 AC-R8-1/2/3 不适用（需求档同口径）；**部分子键受支持**的平台按受支持子键执行。
 - **界面呈现（b6 起）**：按子键渲染——不受支持的子键不渲染开关、行内明示（口径 = `docs/design/modules/settings-app.md` §2；能力源 = `capabilities.toggles` 子键对象，经快照 `platforms[].toggles` 与引擎分支条件同源）。
 - **Kimi 的 search 应用机械（b6）**：面板触发器 + 子面板两行的操作与复核落 `src/engine/adapters/kimi-toggles.mjs`（`kimi.mjs` 的 `applyToggles` 只收 search 子键）；失败（元素缺失 / 状态不符）⇒ `E_SELECTOR_MISSING`，不发送（§3.8 同口径）。
+
+## 6. 自定义外包工（custom；b7 落地）
+
+> 本节 = **自定义外包工的机制权威**（与 §3 DeepSeek / §5 Kimi 同层级）；接口与通用规则见 §2。需求 = R11；实施合同与判据 = `docs/batches/b7-custom-workers.md` §2。
+
+### 6.1 形态与绑定
+
+- 配置形态：`platform: 'custom'` + 每工人 `url`（http/https 绝对地址，必填）+ `driver` 三键（空串 = 通用启发式）；字段与校验见 `docs/design/overview.md`「配置存储」。
+- 绑定：注册表 `adapterFor(worker)`——`custom` 实现 `bindWorker(worker)` 生成派生实例（覆盖 `url` / `driver`，其余引用不变）；**引擎不读配置**，url / driver 由主进程经 `task.run` / `worker.check` 的 `worker` 载荷透传（`docs/design/modules/scheduler.md` §10）。
+  调用点 = 引擎 task-runner 与 worker-check（两处都由「按 `worker.platform` 取适配器」改为 `adapterFor(worker)`）。
+- **必需函数占位**：`defineAdapter` 要求 `checkLogin` / `openSession` / `send`（`base.mjs:46-50`）与 `stream.match|parse`、`dom.collect`、`extract.filesFromText`（`:68-74`）；custom 全部提供，其中 `openSession` 为占位（`newChat:false` ⇒ 不应被调用）、`stream` 为 `match:()=>false` + 显式「不应被调用」的 parse。
+- 登录态：每外包工独立配置目录（既有机制，见 `browser-engine.md` §2）；登录判据 = 输入区可见 ⇒ `ready`；验证码 / 风控词 ⇒ `captcha`；登录词 / 可见密码框 ⇒ `login_required`；输入区一直不出现 ⇒ 经 `loginFailure` 钩子报 `E_SELECTOR_MISSING`（message 含候选链与「若站点需要登录请先在窗口登录」）。
+
+### 6.2 能力位（取值与依据）
+
+| 位 | 值 | 依据 |
+|---|---|---|
+| `newChat` | `false` | 无通用「新建会话」判据 ⇒ 不调 `openSession`、不进会话复用记账（`browser-engine.md` §9）；页内旧回合由**本单回合锚定**（§3.4 通用形态）处置 |
+| `upload` | `false` | 无通用「上传完成」判据 ⇒ 带附件派单在派单期被拒 / 跳过（`scheduler.md` §10「附件能力门」）；不静默发出丢掉附件的任务。**能力位判定取自适配器注册表并归一化**（缺项 / 未注册 ⇒ 按「不支持送件」），与界面 `platforms[].toggles` 同派生处——单一来源，不另立能力表 |
+| `streamCapture` | `false` | 答复流 URL 无法预设（每站协议不同）⇒ 不猜、不匹配；答复走 DOM 通道（§3.4） |
+| `downloadCapture` | `false` | 无通用「下载按钮」判据；取件走层②③（`outbox.md`） |
+| `codeBlockExtract` | `true` | 命名约定作用在采集文本上、平台无关（`text-files.mjs`）；未命中不报错，层③全文保底 |
+| `toggles` | `{ thinking: false, search: false }` | 无通用开关控件判据 ⇒ 引擎跳过应用与复核；界面按子键门控不渲染 + 行内明示（`settings-app.md` §2） |
+| `requestPayloadCapture` | `false` | 无载荷读键约定 ⇒ `result.toggles.ok = null`（不伪装绿） |
+
+### 6.3 驱动参数（F11.3 的「二次优化」接口）
+
+- 三键：`driver.inputSelector`（输入区）· `driver.sendButtonSelector`（发送按钮；空 ⇒ Enter 发送）· `driver.replySelector`（回复区回合容器）；空串 = 该键走通用启发式；选择器**语法**不在界面校验——语法错误在派单回执中定位（`E_SELECTOR_MISSING` + 项名 + 值）。
+- 写入通道：设置界面「驱动参数」对话框（补丁操作 `worker.setDriver`，即时生效；`settings-app.md` §2）或直接编辑 `config.json`（**先退出应用再改**——运行中界面改动会把内存态整份写回、手改内容可能被覆盖；手改后重启生效，不做文件监听是既有口径）。
+- **改参数 ⇒ 立即重派（F11.3 回路，b7 裁定）**：`worker.setDriver`（或 url / driver 任何变更）落盘后，主进程**同步清除该条目健康记录**（`workforce.clearHealth(id)`；与设置服务的 `pruneWorkerHealth` 属同一清除机制、目标不同——后者清已离册的陈旧 id）⇒ 一次驱动不匹配留下的 `E_SELECTOR_MISSING` 冷却（默认 10 分钟）即时失效，不必点托盘「我已处理」。判据 = 批内单元（`clearHealth` ⇒ `statusOf` 回 `ready`）+ 人工场景（改完参数 ⇒ 立即重派成功）。
+- **本工具不做自动优化 / 参数推荐**；优化由用户自己的主包AI 完成（F11.2 / F11.3 口径）。
+
+### 6.4 通用启发式判据（v1）
+
+- **输入区**：`inputSelector` 非空 ⇒ 只用它；否则 `textarea` → `[contenteditable="true"]` → `input[type="text"]`（取最靠下的可见者）。
+- **发送**：`sendButtonSelector` 非空 ⇒ 点击该按钮；否则聚焦输入区 → 清空 → `insertText`（落地校验失败 ⇒ 逐字 `type` 兜底）→ Enter；发送后 6s 内确认「输入区已清空 ∨ 出现新回合元素」，未确认 ⇒ `E_SEND_FAILED`（无流平台的发送确认由本适配器自担，见 §2）。
+- **回复锚定（§3.4「本单回合锚定」的通用形态）**：`send()` 打基线 = ① 命中回合元素及其两代祖先打属性标；② 页内记「基线文本集」+「本单发送文本」。`dom.collect()` 只接受基线之后的候选元素：可见 ∧ 非空 ∧ 不含输入区 ∧ 文本不在基线文本集 ∧ 非回声（归一化文本 == 发送文本，或以其前 40 字开头）⇒ 取最后一个（最新一条助手回复）；无 ⇒ 空串（上层按 `E_NO_RESPONSE` 处置，不静默交付旧答复）。
+- **回复区候选链**（`replySelector` 为空时按序取第一个命中者）：`[data-message-author-role]` → `[class*="message" i]` → `[role="listitem"]`。
+
+### 6.5 失败映射与诊断
+
+| 阶段 | 情形 | 错误码（既有） | message 含 |
+|---|---|---|---|
+| opening | 输入区未找到 | `E_SELECTOR_MISSING` | 阶段 + 候选链 / `inputSelector` 值 |
+| opening | 登录墙 / 风控 | `E_LOGIN_REQUIRED` / `E_CAPTCHA_OR_RISK` | 既有口径 |
+| sending | 发送未确认 | `E_SEND_FAILED` | 阶段 + 发送方式 + 输入区选择器 |
+| streaming | 从未取到非空文本 | `E_NO_RESPONSE` | 等待时长 + `dom.diagnose` 采集诊断 |
+| streaming | 取到但未稳定 | `E_TIMEOUT` | 既有文案 + 采集诊断 |
+
+- `dom.diagnose(page)`：DOM 采集诊断（候选数 / 新回合数 / 回声过滤数 / 基线过滤数 / 生效选择器），单行短串。
+- 无信号判定：`streamCapture:false` 的 DOM 分支「从未取到非空文本」到 `streamFirstByteMs` 判 `E_NO_RESPONSE`（有流平台入 DOM 兜底的既有行为不变）。
+- 日志：一行 `自定义驱动诊断：…`；失败截图沿用既有码集。
+
+### 6.6 验收判据（b7）
+
+- 集成：`npm run verify:engine`（含 `test/integration/engine.custom.test.mjs`）——happy path + 本单锚定 / 驱动缺失与不匹配的定位回执 / 驱动参数生效 / 发送未确认；判据与读数口径见 `docs/batches/b7-custom-workers.md` §2「验收对照」。
+- 对应需求验收：AC-R11-2（b7 面）。
 

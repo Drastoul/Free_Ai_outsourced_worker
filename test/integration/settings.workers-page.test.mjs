@@ -7,7 +7,8 @@
  * 快照读面 = service.mjs 曾出缺陷处）· f3 会话复用块（b6/T7）：快照三键 / 控件四锚点 / 非法回滚 / 合法写双读 ·
  * g 交付目录两段：非法拒绝且不落配置 / 合法落盘且界面显示实际路径（AC-R5-6 界面侧）·
  * h Kimi 可选且经 `worker.add` 落盘（b3 T3；平台行已可选，不再灰显）· h·b6（T3）Kimi 行按子键门控（恰 1 个
- * `[data-toggle]` = search、「深度思考」行内提示、快照 `platforms[].toggles` 子键对象）。
+ * `[data-toggle]` = search、「深度思考」行内提示、快照 `platforms[].toggles` 子键对象）；b 的平台清单断言随 b7 为三项
+ * （deepseek / kimi / custom；自定义的完整流程在 `settings.custom.test.mjs`）。
  *
  * 驱动 = `settings.session.mjs`（`_electron` 主路径，CDP 备选）；读数工具 = `settings.driver.mjs`。
  */
@@ -78,10 +79,12 @@ test('a–g：窗口/新增/删除/调序/改名/开关双读/交付目录 + Kim
       platforms: Array.from(document.querySelectorAll('[data-platform-list] [data-platform]')).map(b => ({ id: b.getAttribute('data-platform'), disabled: b.disabled, text: b.textContent })),
     })`);
     assert.ok(dlg.open, '新增对话框应打开');
-    assert.deepEqual(dlg.platforms.map((p) => p.id), ['deepseek', 'kimi'], '平台清单 = 快照 platforms');
+    assert.deepEqual(dlg.platforms.map((p) => p.id), ['deepseek', 'kimi', 'custom'], '平台清单 = 快照 platforms（b7 随动为三项）');
     assert.equal(dlg.platforms[0].disabled, false, 'DeepSeek 可选');
     assert.equal(dlg.platforms[1].disabled, false, 'Kimi 可选（b3 适配器已注册，不灰显）');
     assert.ok(!dlg.platforms[1].text.includes('待支持'), 'Kimi 不标「待支持」');
+    assert.equal(dlg.platforms[2].disabled, false, '自定义可选（b7 适配器已注册，不灰显）');
+    assert.ok(dlg.platforms[2].text.startsWith('自定义'), `自定义行标签只写「自定义」：${dlg.platforms[2].text}`);
     await session.click('[data-platform="deepseek"]');
     const added = await waitConfig(userData, (c) => c.workers.length === 3);
     assert.ok(added, '新增后 config.json 未出现新条目');

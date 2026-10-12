@@ -3,6 +3,12 @@
  *
  * 适配器 = 一个默认导出的对象；新增平台 = 新增一个模块 + 注册，不改调度与协议面。
  * 本模块提供：接口校验器 `defineAdapter`、能力默认值 `DEFAULT_CAPABILITIES`、引擎错误类型 `EngineError`。
+ *
+ * 可选钩子（b7；`docs/design/modules/adapters.md` §2）：
+ *   · `bindWorker(worker)`——按外包工生成派生实例（`custom` 用 `url` / `driver` 覆盖；其余适配器不实现 ⇒ 行为零变化）；
+ *   · `loginFailure(page)`——登录态判定的失败诊断（返回 `{code, message}` 或 null；null ⇒ 按既有 ready / login_required / captcha 映射）；
+ *   · `dom.diagnose(page)`——DOM 采集失败的诊断单行串（可选；引擎只拼接、不解析）。
+ * `streamCapture: false` 的适配器：引擎跳过 `waitForSendConfirm`，发送确认由该适配器 `send()` 自担（DOM 信号）。
  */
 /**
  * 引擎内部错误：`code` 与 `docs/design/modules/mcp-server.md` 错误码表同源；

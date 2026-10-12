@@ -53,6 +53,7 @@
 - 返回：`{ ok, workers: [{ id, name, platform, enabled, status, detail?, lastCheckedAt }] }`；
   `status ∈ ready | login_required | busy | unavailable | disabled`（对外词表；界面徽标同源）。
 - 冷却映射：调度内部态 `captcha_cooling` 对外一律映射为 `unavailable`，冷却原因写入 `detail`（如「冷却中：验证码 / 风控」）——不新增枚举值。
+- 自定义外包工（b7，`platform = 'custom'`）与内置平台同列；对主包AI 而言仍是「一个外包工」（契约零变化）。
 - 错误：无（读操作）。
 
 ### 3.2 `dispatch_task`（派单）
@@ -73,6 +74,9 @@
 **建任务 / 不建任务的边界（与 AC-R4b-2 / AC-R4b-3 对齐）**
 
 - 派单期：入参校验失败 / 指定未登记 / 指定被停用 / 指定对象**缓存态即知不健康** / 优先级路径无任何可用外包工 ⇒ 错误经 MCP 错误信封同步返回，**不建任务**。
+- 派单期同步拒绝另含（b7）：带 `files` 且目标外包工平台不支持送件（`upload !== true`，如自定义外包工）⇒ `E_WORKER_UNAVAILABLE`（不建任务、不置冷却）；优先级路径跳过该类外包工。能力位判定取自适配器注册表并归一化（缺项 / 未知平台 ⇒ 按「不支持送件」）——单一来源，见 `docs/design/modules/scheduler.md` §10。
+  - **该拒绝的 message 词形**：`该外包工平台不支持送件（附件）：<worker 名>（平台 <platform>）；请去掉附件后重派，或改派支持送件的平台`——明示可用方向（去附件 / 改派）。
+  - **hint 不适配说明**：§5 错误码表中 `E_WORKER_UNAVAILABLE` 的 hint 固定为「人工处理后重派」，对「附件不被支持」这一情形会把主包AI 引向无效动作；本情形以 message 的可用方向为准（hint 表不改——错误码表封闭，b7 边界）。
 - 任务期：派单时缓存态健康、执行中才发现的错误（opening 登录检查、验证码 / 风控、页面改版、外包工启动失败、引擎故障等）⇒ 任务已创建，按调度规则走终态（默认路径降级；降级耗尽或硬绑定 ⇒ needs_human，见 `docs/design/modules/scheduler.md`）。
 - AC-R4b-3 两条复现路径：① 指定对象缓存态即未登录 ⇒ 同步拒绝、不建任务；② 缓存态健康、opening 检查发现登录失效 ⇒ 任务落 needs_human / `E_LOGIN_REQUIRED`。
 
@@ -144,7 +148,7 @@
   错误路径：空 `task` ⇒ `E_BAD_ARGS`；未知任务 ⇒ `E_TASK_UNKNOWN`；未知 `worker` ⇒ `E_WORKER_UNKNOWN`（三者均不建任务）。
 - 实际端口发布一致性（`npm run verify:runtime`；见 `docs/design/overview.md` §13）：`runtime.json.port` 与 `/healthz.port` 一致、按该端口可探活（AC-R9-1 / AC-R9-2 b1 侧）。
 - 文档断言（同一命令内按对象分列执行）：
-  - ① `docs/guide/agent-onboarding.md`：四节结构（接入步骤 / 配置片段 / 工具清单 / 调用示例）+ R9 两节（「换机后首次接入」「端点 / 端口变化后如何更新宿主配置」）+「本工具端点配置」节；
+  - ① `docs/guide/agent-onboarding.md`：四节结构（接入步骤 / 配置片段 / 工具清单 / 调用示例）+ R9 两节（「换机后首次接入」「端点 / 端口变化后如何更新宿主配置」）+「本工具端点配置」节 + 「自定义外包工」节（b7）；
   - ④ `docs/guide/agent-brief.md`：五要素自述（我是谁 / 我提供什么 / 怎么调用 / 出错怎么办 / 何时需要人来操作）；
   - 两份文档内嵌 JSON 片段可解析 + **字段形状断言**（`.mcp.json` 样例 = `mcpServers` 对象形 + `url` 字段；`config.json` 样例 = `mcp.servers` 数组形；形状权威 = `docs/design/overview.md`「端口策略与告知宿主」）；
   - 工具清单与 `tools/list` 对照（AC-R7-1 / AC-R7-3；R9 两节 = AC-R9-4 文档侧；节结构清单见 `docs/design/overview.md`「接入说明的形态与内容」）。
