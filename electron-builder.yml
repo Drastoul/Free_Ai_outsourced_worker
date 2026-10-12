@@ -60,3 +60,5 @@ nsis:
   shortcutName: 免费外包
   deleteAppDataOnUninstall: false
   runAfterFinish: true
+  # b6 收尾：额外桌面快捷方式「接入说明」（指向随包 resources/guide/agent-onboarding.md）；宏见 build/installer-extra.nsh
+  include: build/installer-extra.nsh
