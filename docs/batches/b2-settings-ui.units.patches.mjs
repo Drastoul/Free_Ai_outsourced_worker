@@ -9,10 +9,10 @@ import { applyPatch, PATCH_OPS, PLATFORM_CHOICES } from '../../src/settings/patc
 import { baseConfig as base } from './b2-settings-ui.units.fixtures.mjs';
 
 // ---------------------------------------------------------------------------
-// 八操作：清单 / 合法 / 非法（拒绝且不改传入配置）
+// 九操作：清单 / 合法 / 非法（拒绍且不改传入配置；b7 增 worker.setDriver）
 // ---------------------------------------------------------------------------
 
-test('patches：操作清单 = 冻结的八项；平台清单 = deepseek 可 / kimi 可（b3 落地；b6 增 session.set）', () => {
+test('patches：操作清单 = 冻结的九项；平台清单 = deepseek 可 / kimi 可 / custom 可（b3 落地；b6 增 session.set；b7 增 worker.setDriver 与 custom 平台）', () => {
   assert.deepEqual(PATCH_OPS, [
     'worker.add',
     'worker.remove',
@@ -22,10 +22,11 @@ test('patches：操作清单 = 冻结的八项；平台清单 = deepseek 可 / k
     'worker.setToggles',
     'outbox.set',
     'session.set',
+    'worker.setDriver',
   ]);
   assert.deepEqual(
     PLATFORM_CHOICES.map((p) => `${p.id}:${p.available ? '可' : '待支持'}`),
-    ['deepseek:可', 'kimi:可'],
+    ['deepseek:可', 'kimi:可', 'custom:可'],
   );
 });
 

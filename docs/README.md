@@ -24,6 +24,7 @@
 | 批次档 b4 | `docs/batches/b4-package-ship.md` | 同上（b4 打包与换机自适配） | 已收口 2026-10-11 |
 | 批次档 b5 | `docs/batches/b5-session-reuse.md` | 同上（b5 会话复用：连续派单复用同一聊天会话） | 已收口 2026-10-11 |
 | 批次档 b6 | `docs/batches/b6-small-items-and-repack.md` | 同上（b6 小项清理 + 打包刷新：#17/#23/#26/#28 + #25/#27） | 已收口 2026-10-11 |
+| 批次档 b7 | `docs/batches/b7-custom-workers.md` | 同上（b7 自定义外包工：自由填名称+链接接入任意网页版 AI；台账 #30） | 已收口 2026-10-12 |
 | 随批清单 b4 | `docs/batches/b4-package-ship.checklist.md` | 装机自检清单（换机验收执行件；含构建环境坑与失败读数栏） | 已交付（b4） |
 
 - `docs/requirements/specs/`：功能规格层（暂空，后续批按需建立）。

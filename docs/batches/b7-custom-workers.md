@@ -381,6 +381,9 @@ VERDICT: pass
 - **成本路线**：代码由 eng-coder 直接实施（设计已是完整实施合同：冻结接口 + 文件计划 + 逐条判据）；**起草 / 检索类继续走免费外包**（随包说明一节、站点情报、后续增量）。
 
 ## §5 实施记录（eng-coder）
+**状态行**：实施完成（#32 前提更正后：零改动、读数全绿、未发现代码缺陷）
+
+
 
 ### §5 实施记录 · 切分 B（配置与主进程面：T1 / T4 主进程侧 / T2 补丁 op 面）（eng-coder，2026-10-12）
 
@@ -430,4 +433,51 @@ VERDICT: pass
 | d | 批内单元拆 3 件（363 行 > 300） | 「任一文件超 300 ⇒ 按测试对象拆分」惯例（b1/b2 批内单元先例） | 表外新增 2 件，报备 |
 | e | preload.cjs 1 词注释同步（八操作→九操作） | 注释与 op 表不符会误导跨面改动 | 表外 1 处，报备 |
 
+### §5 实施记录 · 台账 #32 定点修 / 定性（前提更正后：零 src 改动 · 只读复核）（eng-coder，2026-10-12）
+
+**交付摘要**：原判 = b7 引入的跨批回归（b2 归档单元全量 34/1，红例记为 recheckQueued explicit）。父侧前提更正 + 本单实测：**红 = 测试侧过期断言**——`docs/batches/b2-settings-ui.units.patches.mjs` 的冻结断言仍是「八项 op / 两项平台」，而 b7 已合法增 `worker.setDriver`（九项）与 custom 平台（三项）；主包AI 完成跨批随动（工作区未提交）后全绿。**未发现运行时回归，未发文缺陷项**。本单**零 src 改动**（未顺手重构；无越界）。
+
+**读数（本单实测；命令 ⇒ 读数）**
+
+1. `node --test docs/batches/b2-settings-ui.units.mjs` ⇒ 修前 **35 tests / 34 pass / 1 fail**（红 = patches 清单 deepEqual：actual 九项含 `worker.setDriver`，expected 八项——过期断言；非 recheckQueued）· 随动后 **35/35 pass**。
+2. `node --test docs/batches/b2-settings-ui.units.patches.mjs` ⇒ **9/9 pass**。
+3. `node --test --test-name-pattern=recheckQueued docs/batches/b2-settings-ui.units.mjs` ⇒ **4/4 pass**；该例在本单全部三轮全量跑中恒绿——未能复现「recheckQueued 顺序相关红」。
+4. `node --test docs/batches/b7-custom-workers.units.mjs` ⇒ **14/14 pass**。
+5. `npm run verify:engine` ⇒ **19/19 pass**（含 R11-a..d）。
+6. `npm run verify:settings` ⇒ **7/7 pass**（含 b7 custom 例：入口/非法不提交/双读/界面标注/驱动参数写读）。
+
+**只读复核（写面零改动；逐点结论——未发现真实缺陷）**
+
+- `workforce.toEngineWorker`（`src/main/scheduler/workforce.mjs:22-26`）：内置 = `{id,name,platform}` 逐字不变；custom 增 url + driver（**浅拷贝新对象**，无对外共享引用 ⇒ 无状态泄漏；缺 driver ⇒ `{}`，与三键空串在下游同义——均走通用启发式）。
+- 附件能力门：能力来源 = 适配器注册表归一化（`workforce.mjs:9-11`，`getAdapter(platform)?.capabilities?.upload === true`；缺项/未注册 ⇒ 不支持 = fail-closed）；实测能力位：deepseek `upload:true`（`deepseek.mjs:32`）· kimi `upload:true`（`kimi.mjs:32`）· custom `upload:false`（`custom.mjs:37`）⇒ 内置平台行为零变化。
+- `requireUpload` 透传（4 调用点全核 + 默认值）：`scheduler.mjs:60`（dispatch，`files.length > 0`）· `scheduler.mjs:118`（排队期降级）· `execution.mjs:215`（运行期降级候选）· 默认 `requireUpload = false`（`workforce.mjs:194 / :236`）⇒ 未传参路径 / 空 files 路径行为零变化（无默认值漂移）。
+- 拒绝路径无副作用：显式指定无送件能力者 ⇒ `workforce.mjs:210` 抛 `E_WORKER_UNAVAILABLE`（`uploadUnsupported`），`dispatch` 不建任务；全链 `setCooldown` 调用点仅 `execution.mjs:191`（运行期失败）与 workforce 自身 ⇒「不建任务、不冷却」成立。
+- `clearHealth`（`workforce.mjs:128-132`）vs `pruneWorkerHealth`（`service.mjs:124-135`）：前者按 id 删单条，后者删「不在名册」的孤儿（每次成功 patch 后卫生）；setDriver 触发点（`service.mjs:158`）位于 `config.save` 成功之后，`op.id.trim()` 与 `requireId`（`patches.mjs:55`）同口径 ⇒ 只清目标条目、失败不触发；清 `login_required` 缓存态属设计口径（scheduler.md §6「改完即重派」），非缺陷。
+- 引擎载荷仅两处 worker 构点（`execution.mjs:152` task.run · `service.mjs:186` worker.check），均已走 `toEngineWorker`；`snapshot-workers.mjs` 纯投影（内置形状不变）；`patches-custom.mjs` / `config-schema.mjs` 为纯函数（`applyPatch` 深拷贝语义不变）。
+
+**已知未决项（非本单新增）**：`attach_files` 补件路径仍在派单期能力门之外（`scheduler.mjs:269-285`：queued/running 可追加 ⇒ 引擎 uploading 兜底拒 + 10 分钟冷却）——b7 §5 上抛项 2 已报，待父侧裁定，本单不动。
+
+**越界声明**：无。**零文件改动**（未触碰 `src/**`、`docs/batches/b2-settings-ui.units*.mjs`、需求/设计/批次档）。工作区仅存主包AI 的跨批随动改动（`docs/batches/b2-settings-ui.units.patches.mjs`，未提交，非本单笔）。受审件行数均 ≤300（read 实测：scheduler 298 · execution 289 · config-schema 258 · patches 276 · workforce 246 · service 298；含末尾空行口径 ±1）。
+
+**进程与端口**：electron / node 进程复查为空；55xxx 端口无 LISTENING 残留（仅 TIME_WAIT 瞬态，pid 0）。
+
+**审计与代码评审轮次**：0（零改动 ⇒ 无审计对象；只读复核即本单交付物，未起内部审计 / advisor）。**终态：clean**（就本单范围）。
+
 ## §6 验证与收口（父代理）
+
+### b7 收口（2026-10-12）
+
+**收口检查（D7 结算同步）**
+- **T1–T5 全部交付**（三切分并行）：**A 引擎通用驱动面**（`custom.mjs` / `custom-page.mjs` / `custom-dom.mjs` + `adapterFor` + 发送确认落 `send()` / 跳过 `waitForSendConfirm` / 无信号按 `streamFirstByteMs` 判 `E_NO_RESPONSE`）· **B 配置与主进程面**（`url`/`driver` 归一 · 补丁 op `worker.setDriver` · `clearHealth` 清冷却 · 派单期附件能力门 · `service.mjs` 拆出 `snapshot-workers.mjs`）· **C 设置界面面**（`[data-platform="custom"]` 入口 · 同对话框表单 · 驱动参数对话框 · `custom-hint` / `custom-limits` 如实标注）· **随包说明第十节**（主包AI 落笔，起草 = 免费外包）· **跨批随动**（主包AI）。
+- **实施期意外与处置（如实记录）**：三个实施实例（#6/#7/#8，C 重派为 #9）**全部因付费额度耗尽（LLM API 402 Insufficient Balance）中断，未出交付报告**（⇒ A/B/C 的 §5 自审记录**缺失**）。父侧改为**逐面实测定损**并据此收口；额度恢复后以 1 轮定点修（#12）补核。
+- **父侧验收（主包AI 亲跑：唯一一次仓库套件运行）**：批内单元 b1 **27** · b2 **35** · b3 **11** · b4 **7** · b5 **14** · b6 **15** · **b7 14**（`fail 0` ×7）· `verify:mcp` **1** · `verify:engine` **19**（b6 时 12 ⇒ 本批新增 7 例全过）· `verify:runtime` **2** · `verify:settings` **7** · **真机 `verify:loop`（DeepSeek）1** · **`verify:loop:kimi` 1**。
+- **关键读数**：语法自检 23 件 **0 错** · 批内单元（b7）**14/14** · `verify:settings` 含 **评审 🔴 修复生效**（行内如实标注 =「不支持：送件（附件）、下载捕获、新建会话」）· `custom-hint` 含「实验性」与「主包AI」· 快照 `platforms.toggles` 增 `custom:{thinking:false,search:false}` · 自定义条目落盘含 `url` 且 `list_workers` / `/healthz` 可见 · 驱动三键写读 + **重启回读**一致 · 平台 label = **「自定义」**（用户随批修正）。
+- **修轮（1 轮，round=fix）**：**结论更正** —— 父侧初判「b7 引入代码回归（b2 归档单元 `recheckQueued` 全量红）」**不成立**：跨批随动（`.patches` 的过期断言八项→九项 / 两项→三项）落笔后，**同一份 b7 src 下聚合 35/35 全绿** ⇒ 红在**测试侧过期断言带红下游**。原归因实验只换 src、未同时换回旧断言 ⇒ 结论不可靠（父侧更正并撤回台账 #32）。#12 只读复核 B 切分三项（`toEngineWorker` 载荷逐字不变 + driver 浅拷贝 · `requireUpload` 注册表归一化 fail-closed、内置 `upload:true` 行为零变化、4 调用点默认 false · `clearHealth`/`pruneWorkerHealth` 语义分工）**未发现代码缺陷**；三条自检 14/14 · 19/19 · 7/7。
+- **父侧直改披露（可回退）**：需求档 R11 边界补一条（不含送件/开关/下载/新建会话）· 本档 §1（裁定 U1–U6 + 状态行 + 模板占位清理）· §4（label 随批修正落实；切分归属更正；**用户原话被批量替换误伤后就地恢复**）· §2 两处 🟡 残项（`scheduler.mjs` 读数改 298→298；设计档落点清单补 §4/§6）· **跨批归档件** `docs/batches/b2-settings-ui.units.patches.mjs`（八项→九项 + `custom:可` + 注释；**非记录面随动**，b2 记录面未动）· `docs/guide/agent-brief.md` 一句（自定义外包工的 `E_SELECTOR_MISSING` 处置 = 交其主包AI 改驱动参数）· `docs/README.md` b7 行 · 随包说明第十节（落笔）。
+- **评审残项处置**：轮 2 的 2 🟡 已就地修；4 🔵 中「读数漂移」按受影响文件表自述口径（「实施后按实际回调」）在本档留有取数时点，其余两条（`url` 变更不可达面的措辞、U1 残留）已就地修 —— **无遗留 🟡 / 🔴**。
+- **未决项（记账）**：① **T6 打包刷新未完成** —— `release/win-unpacked/resources/app.asar` **再次被不可见占用者锁定**（退出实例后锁探针仍 `EBUSY`、三个进程名过滤器全空；`dist` 三次同点失败），且失败的 `dist` 已使 `release/win-unpacked/免费外包.exe` **缺失** ⇒ 处置同 b6：**重启机器后**原地 `dist` + `verify:pack`；② **`attach_files` 补件路径未纳入派单期能力门**（#12 上抛；父侧裁定 = 下一批用同一把尺子补齐，不与本批混）。
+- **人工场景**：真机双平台环已跑（内置平台端到端未受本批引擎改动影响 ✓）；自定义外包工的**真实第三方站点试单**（U6）未执行，列为挂账（与 ① 同批补）。
+- **台账**：#30 核销；新增两条（打包刷新补跑 · `attach_files` 能力门）。
+- **暂缓批复核**：无。
+
+**冻结**：本记录自「已收口」状态行起冻结，此后不再回改。
