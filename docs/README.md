@@ -1,5 +1,7 @@
 # 免费外包 · 文档地图
 把网页版 AI 变成你的 AI 助手可以调用的外包工 —— 你在界面登记网页版 AI 的名字和链接，支持 MCP 的智能体（Claude Code / Cursor 等）就能派活给它：自动开浏览器、发送、取回答复与文件。
+# Free outsourcing · Document map
+Turn the web-based AI into an outsourced worker that your AI assistant can call upon - you register the name and link of the web-based AI on the interface, and intelligent agents supporting MCP (such as Claude Code / Cursor) can assign tasks to it: automatically opening browsers, sending and retrieving responses and files.
 
 ## 感谢：使用ThinCoder完成，用的DeepSeek的token和各种免费网页平台
 
@@ -47,3 +49,51 @@
 - **验收条目**命名：`AC-R<需求号>-<序号>`（需求档定义，批次档 §2 与设计档引用）。
 - 探针产物（`probe/out*`）与浏览器配置目录（`.browser-profile/`）不进版本库，其内容不进文档正文（只引用路径与结论）。
 - 批次流程与六段结构见 `docs/batches/b1-core-loop.md` 头部说明。
+
+
+## Acknowledgements: This project was completed using ThinCoder, utilizing DeepSeek tokens and various free web platforms
+
+## Selling Points:
+The saving lies in "avoiding back-and-forth hassles" rather than those few cents: tasks like reading materials, writing drafts, and conducting reviews, which are "time-consuming processes", can be delegated to web-based AI. This is done using the subscription you have already paid for, with a process cost of 0 (for the same 5 KB draft, using an API token costs approximately ¥0.02, while using a paid proxy costs ¥1–5, a difference of 50–250 times).
+You can add any web-based AI by filling in the name and link, not limited to the built-in DeepSeek / Kimi (tested and approved on Doubao, Yuanbao, Zhipu, and iFlytek Spark).
+This device runs locally and does not access the cloud: it only listens on 127.0.0.1, and the login status is stored locally, without proxying accounts or bypassing verification codes.
+The failure will tell you why: the acknowledgment page includes a "census" (actual existing elements/class names/visible text, desensitized) ⇒ just give it to your AI assistant and the driver parameters will be adjusted.
+
+This repository's documentation forms a self-contained system: **requirements document (what to do) → design document (how to do it) → batch document (how to implement this round)**.
+New documents must be registered in this table before being saved; the file name and path should use ASCII characters, and the body should be in Chinese.
+Directory responsibilities are organized according to the docRoot specified in `PROJECT-MANIFEST.json`: `requirements/`, `requirements/specs/`, `design/`, `design/modules/`, and `batches/`.
+
+## 1. Document Index
+
+| Document | Path | Responsibility | Status |
+|---|---|---|---|
+| Project Requirements | `docs/requirements/overview.md` | R1–R10 Five Elements and Acceptance Items | Confirmed |
+| Architecture Design | `docs/design/overview.md` | Overall project architecture, process and MCP integration, configuration, security, packaging, integration instructions, key decisions K1–K13, b1 document plan, acceptance system | Approved (b1 has been implemented) |
+| Module · MCP Server | `docs/design/modules/mcp-server.md` | Transport, Six-Tool Kit Contract, Error Code Authority Table | Approved (b1 Implemented) |
+| Module · Scheduler | `docs/design/modules/scheduler.md` | State machine, selection, concurrency, retry fallback, timeout, cancellation | Approved (b1 implemented) |
+| Module · Adapter | `docs/design/modules/adapters.md` | Adapter Interface + DeepSeek / **Kimi** Implementation (Authoritative Streaming Protocol for Various Platforms) | Approved (b1 · b3 Implemented) |
+| Module · Browser Engine | `docs/design/modules/browser-engine.md` | Configuration directory, startup parameters, download capture, crash restart | Approved (b1 implemented) |
+| Module · Delivery | `docs/design/modules/outbox.md` | Directory structure, manifest, naming cleanup, upper limit | Approved (b1 implemented) |
+| Module · Settings Interface | `docs/design/modules/settings-app.md` | b2 Settings Window Page and Interaction | Approved (b2 Implemented) |
+| Access Instructions (Included in Package) | `docs/guide/agent-onboarding.md` | R7① Operator-oriented Long Access Document | Delivered (b1) |
+| AI Description (Included in Package) | `docs/guide/agent-brief.md` | R7④ Service Description for AI-Agent | Delivered (b1) |
+| Batch File b1 | `docs/batches/b1-core-loop.md` | Discussion / Task and Design / Review / Approval / Implementation / Closure Record (Six Sections, One Author) | Closed 2026-10-09 |
+| Batch File b2 | `docs/batches/b2-settings-ui.md` | Ditto (b2 Settings UI) | Closed on 2026-10-10 |
+| Batch File b3 | `docs/batches/b3-kimi-adapter.md` | Ditto (b3 integrates with the second platform, Kimi) | Closed on 2026-10-11 |
+| Batch File b4 | `docs/batches/b4-package-ship.md` | Ditto (b4 Packaging and Machine Adaptation) | Closed on 2026-10-11 |
+| Batch File b5 | `docs/batches/b5-session-reuse.md` | Ditto (b5 Session Reuse: Reusing the same chat session for continuous dispatch) | Closed 2026-10-11 |
+| Batch File b6 | `docs/batches/b6-small-items-and-repack.md` | Ditto (b6 small items cleanup + repack refresh: #17/#23/#26/#28 + #25/#27) | Closed 2026-10-11 |
+| Batch File b7 | `docs/batches/b7-custom-workers.md` | Ditto (b7 Custom Outsourced Workers: Free to fill in name + link to any web-based AI; Account #30) | Closed 2026-10-12 |
+| Batch File b8 | `docs/batches/b8-custom-worker-hardening.md` | Ditto (b8 custom outsourced worker supplementation: write-in axis / occlusion axis / retrieval of response candidate chain 11 items / diagnostic survey / error code mapping / spare parts gate; ledger #34/#36/#37/#38) | Closed 2026-10-14 |
+| Batch List b4 | `docs/batches/b4-package-ship.checklist.md` | Installation Self-Checklist (for replacement acceptance; includes build environment pitfalls and failure readings column) | Delivered (b4) |
+
+- `docs/requirements/specs/`: Functional specification layer (currently empty, to be established as needed in subsequent batches).
+- There are also unit test files (development tools, not included in the `test/` tree) and fixtures (`b1-core-loop.fixtures/`: SSE fixture and expected baseline) archived with each batch under `docs/batches/`.
+
+## 2.  Writing convention
+
+- **Single source**: The same mechanism is detailed in only one place, with the rest being referenced. Examples of authoritative landing points: Error codes = `modules/mcp-server.md` "Error Codes"; DeepSeek stream protocol = `modules/adapters.md` "Receiving and Replying Main Channel"; Configuration schema = `design/overview.md` "Configuration Storage".
+- **References are in the format of** `docs/design/modules/xxx.md` `Section Name`; do not include relative references pointing to the context of this document.
+- **Acceptance Check Entry** naming: `AC-R<Requirement Number>-<Sequence Number>` (defined in the requirement document, referenced in batch document §2 and design document).
+- The probe output (`probe/out*`) and the browser configuration directory (`browser-profile/`) are not included in the version control repository, and their contents are not included in the main body of the document (only the reference paths and conclusions are cited).
+- For the batch process and six-stage structure, see the header description in `docs/batches/b1-core-loop.md`.
