@@ -37,6 +37,7 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 - 终态：`done / failed / canceled / needs_human`（其余为过程态）。
 - `needs_human` 与 `failed` 的分界：**需要人去处理才能继续**（登录 / 风控 / 页面改版（`E_SELECTOR_MISSING`）/ 降级耗尽）⇒ needs_human；纯机器原因（超时重试耗尽等）⇒ failed。
 - **派单期拒绝 vs 任务期终态**：派单时不可选（指定不健康 / 无任何可用外包工）⇒ **同步拒绝、不建任务**；`needs_human` 只发生在任务已创建之后（规则与错误码全集见 `docs/design/modules/mcp-server.md` §3.2）。
+- **补件能力门（b8）**：`attach_files` 走与派单期**同一**附件能力门——任务已存在（「不建任务」读作不追加文件 / 不重启执行 / 状态不变）；平台能力 `upload !== true` ⇒ **同步拒绝** `E_WORKER_UNAVAILABLE` + **不置冷却**（判定与拒绝词形 = `workforce.assertUploadCapable`，单一来源见 §10）。检查顺序 = 任务存在 → 能力门 → 状态 / 阶段门。**词形口径（G）**：沿用既有 `uploadUnsupported` 逐字（「请去掉附件后重派，或改派支持送件的平台」）——对补件路径语义略偏（任务已存在、无「重派」动作），**裁定接受**（不做补件专用词形，避免第二份词形）。
 - 重试 = **新会话重发整单**（不复用被中断的会话，避免半截上下文）。
 
 ## 4. 选人算法
@@ -129,4 +130,5 @@ queued ──选人成功、引擎接单──▶ running(phase 链) ──▶ d
 - 集成：`npm run verify:loop`（真机全链）。
 - 集成（b5）：`npm run verify:engine` 含会话复用场景（连续两单复用 / TTL 到期换新 / 出错即换新 / 上限换新 / 禁用回退 / 取消即换新 / 复用 × DOM 兜底；见 `modules/browser-engine.md` §9）。
 - 集成（b7）：`npm run verify:engine` 含自定义外包工场景（happy path + 本单锚定 / 驱动缺失与不匹配的定位回执 / 驱动参数生效；见 `docs/batches/b7-custom-workers.md` §2）。
-- 对应需求验收：AC-R4a-1..3、AC-R4b-1..3、AC-R3-5、AC-R8-3（处置路径）。
+- 单元（b8）：`attach_files` 补件能力门（不支持送件 ⇒ 同步拒绝 `E_WORKER_UNAVAILABLE` ∧ 不追加文件 ∧ 不置冷却 ∧ 任务状态不变；支持送件 ⇒ 正常追加）——见 `docs/batches/b8-custom-worker-hardening.md` §2。
+- 对应需求验收：AC-R4a-1..3、AC-R4b-1..3、AC-R3-5、AC-R8-3（处置路径）、AC-R12-4（b8 补件门）。

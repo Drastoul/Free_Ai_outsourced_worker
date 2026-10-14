@@ -174,7 +174,8 @@ export default {
 
 ## 6. 自定义外包工（custom；b7 落地）
 
-> 本节 = **自定义外包工的机制权威**（与 §3 DeepSeek / §5 Kimi 同层级）；接口与通用规则见 §2。需求 = R11；实施合同与判据 = `docs/batches/b7-custom-workers.md` §2。
+> 本节 = **自定义外包工的机制权威**（与 §3 DeepSeek / §5 Kimi 同层级）；接口与通用规则见 §2。需求 = R11 / **R12**；实施合同与判据 = `docs/batches/b7-custom-workers.md` §2（b7 面）· `docs/batches/b8-custom-worker-hardening.md` §2（b8 面）。
+> **b8 增量（写入轴 / 遮挡处置 / 取答复候选族 / 诊断普查 / 错误映射）= 本节 §6.4 / §6.5 / §6.6 现行文**；本单锚定机制（基线标 + 基线文本集 + 回声过滤）不动。
 
 ### 6.1 形态与绑定
 
@@ -203,12 +204,42 @@ export default {
 - **改参数 ⇒ 立即重派（F11.3 回路，b7 裁定）**：`worker.setDriver`（或 url / driver 任何变更）落盘后，主进程**同步清除该条目健康记录**（`workforce.clearHealth(id)`；与设置服务的 `pruneWorkerHealth` 属同一清除机制、目标不同——后者清已离册的陈旧 id）⇒ 一次驱动不匹配留下的 `E_SELECTOR_MISSING` 冷却（默认 10 分钟）即时失效，不必点托盘「我已处理」。判据 = 批内单元（`clearHealth` ⇒ `statusOf` 回 `ready`）+ 人工场景（改完参数 ⇒ 立即重派成功）。
 - **本工具不做自动优化 / 参数推荐**；优化由用户自己的主包AI 完成（F11.2 / F11.3 口径）。
 
-### 6.4 通用启发式判据（v1）
+### 6.4 通用启发式判据（v2；b8 重写写入轴与回复候选族）
 
-- **输入区**：`inputSelector` 非空 ⇒ 只用它；否则 `textarea` → `[contenteditable="true"]` → `input[type="text"]`（取最靠下的可见者）。
-- **发送**：`sendButtonSelector` 非空 ⇒ 点击该按钮；否则聚焦输入区 → 清空 → `insertText`（落地校验失败 ⇒ 逐字 `type` 兜底）→ Enter；发送后 6s 内确认「输入区已清空 ∨ 出现新回合元素」，未确认 ⇒ `E_SEND_FAILED`（无流平台的发送确认由本适配器自担，见 §2）。
+- **输入区**：`inputSelector` 非空 ⇒ 只用它；否则 `textarea` → `[contenteditable="true"]` → `input[type="text"]`（三候选取**文档序最靠后的可见者**）。
+- **写入（b8 重写）**——多行作为同一段内容落入输入区（不触发发送）；Slate 类「元素会被重建」的站点（千问）也能稳定写入：
+  0. **遮挡处置（b8 · 轴 1b）——定位完成后、聚焦前、清空前（仅在探测到遮挡时动作）**：输入区中心点 hit-test（`elementFromPoint` 命中 ≠ 输入区 ∧ 非其祖先 / 后代 ⇒ 判遮挡；输入区不在视口内先 `scrollIntoView`）⇒ 按序有界的消除阶梯：
+     ① `Escape`；② 关闭按钮候选链（顺序 = 语义锚点 → 类名族 → 文案兜底：`[aria-label*="关闭" i]` → `[title*="关闭" i]` → `[class*="close" i]` → 遮挡子树内 `button` 且文本 ∈ {关闭 / 知道了 / 我知道了 / 跳过 / 好的 / OK / Close}；作用域先遮挡子树、再退 `[role="dialog"] / [class*="dialog" i] / [class*="modal" i]` 容器内；可见 ∧ 非输入区，取首个、每轮只点一个；**不取「容器内任意 button」**——可能点中主按钮「开始体验 / 下一步」，副作用不可控）；③ 点蒙层外（视口四角 + 边中点候选、8px 内缩，取首个「不落输入区 ∧ 命中元素非交互控件」的点 ⇒ `mouse.click`）。
+     约束 = **≤3 轮 / ≤4000ms**（调用级共享）；幂等（无遮挡 ⇒ 探测一次即返回、零动作）；**执行时机（H）** = 仅在探测到遮挡时动作，且必须在定位完成后、聚焦前、清空前；不抛、不阻断（处置后仍被挡 ⇒ 照常写入，仅失败时并入诊断）。机制与探测函数落 `src/engine/adapters/custom-overlay.mjs`（§6.5 诊断遮挡段同源）。
+     **复探时机（#5）** = 每轮动作后等一帧或 **≤200 ms** 短等待（取先到者；初值待真机回调）再 hit-test，该等待计入共享预算——真机（关闭动画 / 异步消除）与机器 fixture（`Escape` 同步消除）**同判**；**时间注入（C）** = 时钟与等待可注入（`now` / `wait`，缺省 `Date.now` / 真实短等待——批内单元据此验证 ≤4000 ms，同 b5 `decide({…, now})` 口径）。
+  1. **定位（无标记）**：页内扫描取输入元素——**不打属性标**（原 `data-fo-custom-input` 机制删除；Slate 类站点在点击期间重渲染元素，标记定位必败）。
+  2. **聚焦（focus 优先）**：页内 `focus()` + 置插入点（`textarea` / `input` ⇒ 选区到末尾；`contenteditable` ⇒ `Range` 收拢到内容末尾）⇒ 复核 `document.activeElement` 属可编辑元素；
+     未达 ⇒ **坐标点击兜底**（`getBoundingClientRect()` 中心点 ⇒ `mouse.click`，不走 Playwright 可操作性检查）⇒ 再复核。**兜底取几何的时机（#6）**：取几何**前**先判矩形——**宽高全 0（元素句柄已脱离 DOM）⇒ 不点击，直接重新定位并消耗一次尝试**（总尝试数仍 ≤3；重新定位后回到第 2 步 focus 优先重跑）——与 `/custom-slate`「首次聚焦后节点被替换」的判据同口径。
+  3. **清空**：`Control+A` + `Backspace`。
+  4. **逐行写入**：按 `\n` 拆行 ⇒ 逐行 `insertText(line)`、行间 `Shift+Enter`；**换行绝不作按键事件下发**（`insertText` 整段与 `keyboard.type` 兜底都会把 `\n` 变成 Enter ⇒ 误发送；2026-10-13 真机实测，b8 根因处置）。**待实测（I⑥）**：`Shift+Enter` 在自定义站点未实测（未响应软换行 ⇒ 写入失败 `E_SEND_FAILED` + 普查，不静默降级）。
+  5. **重定位与有界重试**：读回校验不过 ⇒ 重新定位（元素可能已被重建）并整体重试，**≤3 次尝试**。
+  6. **读回校验**：空白归一化后要求输入区文本含**期望文本前 64 字**（多行与空白差异不误判；`textarea` 与 `contenteditable` 同判）；
+     尝试耗尽 ⇒ `E_SEND_FAILED`（message = 阶段 + 环节 + 尝试数 + 输入区/候选链 + 普查诊断，见 §6.5）。
+  **「稳定写入」定义（E）**：读回校验在 **≤3 次尝试**内通过；未通过 ⇒ `E_SEND_FAILED`——需求 F12.1 的「稳定写入」（`docs/requirements/overview.md:332`）按此口径读。
+- **发送**：`sendButtonSelector` 非空 ⇒ 点击该按钮（失败 ⇒ `E_SELECTOR_MISSING`）；否则**发送前复核焦点**（未聚焦 ⇒ 重新聚焦一次）⇒ `keyboard.press('Enter')`；
+  发送后 6s 内确认「输入区已清空 ∨ 出现新回合元素」（6 s = b7 既有口径，I④），未确认 ⇒ `E_SEND_FAILED`（message 增普查诊断；无流平台的发送确认由本适配器自担，见 §2）。
 - **回复锚定（§3.4「本单回合锚定」的通用形态）**：`send()` 打基线 = ① 命中回合元素及其两代祖先打属性标；② 页内记「基线文本集」+「本单发送文本」。`dom.collect()` 只接受基线之后的候选元素：可见 ∧ 非空 ∧ 不含输入区 ∧ 文本不在基线文本集 ∧ 非回声（归一化文本 == 发送文本，或以其前 40 字开头）⇒ 取最后一个（最新一条助手回复）；无 ⇒ 空串（上层按 `E_NO_RESPONSE` 处置，不静默交付旧答复）。
-- **回复区候选链**（`replySelector` 为空时按序取第一个命中者）：`[data-message-author-role]` → `[class*="message" i]` → `[role="listitem"]`。
+- **回复区候选链 v2（b8）**（`driver.replySelector` 非空 ⇒ 只用它，**继续最高优先**；否则按序取**第一个 ≥1 命中**项）：
+  1. `[data-message-author-role]`（既有）
+  2. `[class*="message" i]`（既有）
+  3. `[role="listitem"]`（既有）
+  4. `[data-role="assistant"]`
+  5. `[data-testid*="assistant" i], [data-testid*="message" i]`
+  6. `[class*="bubble" i]`
+  7. `[class*="chat-message" i], [class*="message-content" i], [class*="response-content" i]`
+  8. `[class*="answer" i]`
+  9. `[class*="markdown" i]`
+  10. `[class*="assistant" i]`
+  11. `[class*="reply" i], [class*="response" i]`（第 4–11 项 = **初值，待真机回调**）
+  - 排序原则：① **回归安全**——现链三项原位不动（已通过站点候选集不变）、新族**尾追**（原三项 0 命中时才生效）；
+    ② **粒度从粗到细**——角色属性（每回合一个元素，取最后一条语义最准）→ 回合容器 → 回复正文块（正文块级由「容器拼接」路径兜底，诊断以 `拼接=容器` 如实标注）；
+    ③ **证据** = 2026-10-13 真机矩阵（元宝 / 智谱原三项 0 命中）+ 开源客户端对同站点实际使用的选择器口径（元宝 `agent-chat__bubble--ai` / `hyc-content-md` · 智谱 `[data-role="assistant"]` / `markdown` · 千问 `answer-common-card` / `qk-markdown-react` · 豆包 `[data-role="assistant"]` / `message_content`）；
+    外部口径只作候选族设计依据——**不预置站点专用选择器**（R12 边界）。
 
 ### 6.5 失败映射与诊断
 
@@ -216,16 +247,28 @@ export default {
 |---|---|---|---|
 | opening | 输入区未找到 | `E_SELECTOR_MISSING` | 阶段 + 候选链 / `inputSelector` 值 |
 | opening | 登录墙 / 风控 | `E_LOGIN_REQUIRED` / `E_CAPTCHA_OR_RISK` | 既有口径 |
-| sending | 发送未确认 | `E_SEND_FAILED` | 阶段 + 发送方式 + 输入区选择器 |
+| sending | **写入失败（聚焦 / 清空 / 落字 / 读回 / 重试耗尽；b8）** | `E_SEND_FAILED` | 阶段 + 环节 + 尝试数 + 输入区 / 候选链 + 普查诊断 |
+| sending | 发送未确认 | `E_SEND_FAILED` | 阶段 + 发送方式 + 输入区选择器 + 普查诊断 |
 | streaming | 从未取到非空文本 | `E_NO_RESPONSE` | 等待时长 + `dom.diagnose` 采集诊断 |
 | streaming | 取到但未稳定 | `E_TIMEOUT` | 既有文案 + 采集诊断 |
 
-- `dom.diagnose(page)`：DOM 采集诊断（候选数 / 新回合数 / 回声过滤数 / 基线过滤数 / 生效选择器），单行短串。
+- **写入类失败码口径（b8）**：写入路径内任何非 `EngineError` 异常（Playwright 超时 / 元素脱离 / 元素重建等）一律包装为 `EngineError('E_SEND_FAILED', …)`——**不得回落 `E_INTERNAL` / `E_UNKNOWN`**
+  （`E_INTERNAL` 的 `needsHuman=true` 会把主包AI 引向「人工处理」，实际非登录非验证码；2026-10-13 千问单实测）；该码属瞬时类（`docs/design/modules/scheduler.md` §6）⇒ 同外包工重试、**不置冷却**。
+  「输入区未找到」与「发送钮不可用」沿用 `E_SELECTOR_MISSING`（定位类，不改）。
+- `dom.diagnose(page)`（b8 扩）：DOM 采集诊断**单行串**——既有字段（候选数 / 新回合数 / 基线过滤 / 回声过滤 / 生效选择器 / 容器拼接标记）+ **普查三段 + 遮挡段**：
+  `族计数 <probe=n、…>`（固定探测族 **11 项**：8 类名族 `message / bubble / markdown / answer / assistant / chat / reply / response`、`[role=listitem|log]`、`[data-message-author-role]`、`[data-testid]`；仅列 n≥1）·
+  `可见文本[「≤60 字」×≤5]`（可见叶子文本块取文档序**末 5 条**——最新内容即回复区；排除输入区子树**及其祖先链**（避免把整页容器计入））· `类名 Top≤10（token×n）`（可见元素 class token 频次，token ≤40 字）· `遮挡=<无|命中（元素=… 文本=「≤40 字」）>`（轴 1b 探测同源；输入区未找到 ⇒ 无）。
+  **空白归一（#7）= 文本片段（含遮挡文本片段）先折叠空白：`\s+` → 单空格、去换行（含全角空白 `\u3000`），截断在归一之后**——「诊断单行无换行」可机器判定的前提。
+  **脱敏（F）= 类名 token 与文本片段命中 `[a-z0-9]{16,}` ⇒ 替换为 `<hash>`**；**已知残余**：可见文本片段（末 5 条 ×≤60 字）仍可能含页面既有内容（非本单数据），不承诺完全脱敏。
+  上限与脱敏：普查段页内**一次** `evaluate`（遮挡段复用轴 1b 一次轻量 hit-test `evaluate`）；扫描 ≤2000 可见元素（**初值，待真机回调**）；各段各自截断（遮挡描述 ≤100 字）；诊断整串 ≤900 字；**不读** cookie / storage / 表单值 / 输入区文本。
+  引擎侧拼接截断上限 240 → **1200**（`src/engine/answer.mjs`）。
 - 无信号判定：`streamCapture:false` 的 DOM 分支「从未取到非空文本」到 `streamFirstByteMs` 判 `E_NO_RESPONSE`（有流平台入 DOM 兜底的既有行为不变）。
-- 日志：一行 `自定义驱动诊断：…`；失败截图沿用既有码集。
+- 日志：一行 `自定义驱动诊断：…`（词形不动）+ 写入两行新增词形（正则可判）——成功 `自定义写入：尝试=<n>/3 聚焦=<focus|click> 行数=<m> 读回=通过`；失败 `自定义写入失败：尝试=<n>/3 环节=<定位|聚焦|清空|写入|读回> 输入区=<…>`；遮挡三词形（轴 1b）：`自定义遮挡处置：动作=<Escape|关闭按钮|点蒙层外> 轮次=<n>/3` · `自定义遮挡：消除` · `自定义遮挡：仍在（不阻断）`；失败截图沿用既有码集。
 
-### 6.6 验收判据（b7）
+### 6.6 验收判据（b7 面 · b8 面）
 
-- 集成：`npm run verify:engine`（含 `test/integration/engine.custom.test.mjs`）——happy path + 本单锚定 / 驱动缺失与不匹配的定位回执 / 驱动参数生效 / 发送未确认；判据与读数口径见 `docs/batches/b7-custom-workers.md` §2「验收对照」。
-- 对应需求验收：AC-R11-2（b7 面）。
+- 集成（b7）：`npm run verify:engine`（含 `test/integration/engine.custom.test.mjs`）——happy path + 本单锚定 / 驱动缺失与不匹配的定位回执 / 驱动参数生效 / 发送未确认；判据与读数口径见 `docs/batches/b7-custom-workers.md` §2「验收对照」。
+- 集成（b8）：`npm run verify:engine`（含 `test/integration/engine.custom.b8.test.mjs`）——多行任务恰好一次发送且提交体含全文 / Slate 重建站写入成功 / 写入失败 ⇒ `E_SEND_FAILED` + 普查 / 普查三段字段形状 / 回复候选新族命中（无 `replySelector`）/ **遮挡层处置（`/custom-overlay`：链外类名整屏遮挡 ⇒ 处置后写入成功，日志词形可判）**；判据与读数口径见 `docs/batches/b8-custom-worker-hardening.md` §2「验收对照」。
+- 批内单元（b8）：`node --test docs/batches/b8-custom-worker-hardening.units.mjs`——写入计划 / 落地判定 / 写入失败码映射 / 普查串形状 / 候选链顺序冻结 / `attach_files` 补件能力门 / **遮挡阶梯顺序与有界（fake page）**。
+- 对应需求验收：AC-R11-2（b7 面）· AC-R12-1 / R12-2 / R12-3 / R12-6（b8 面，机器判据）· AC-R12-7（b8 面，真机 + 机器；需求档 R12 **F12.7 / AC-R12-7 已可见**——判据与读数口径见 `docs/batches/b8-custom-worker-hardening.md` §2「验收对照」）。
 

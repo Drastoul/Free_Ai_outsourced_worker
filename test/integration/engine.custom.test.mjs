@@ -3,7 +3,8 @@
  *（机制权威：`docs/design/modules/adapters.md` §6；判据与读数口径：`docs/batches/b7-custom-workers.md` §2「验收对照」2）
  *
  * 注入缝隙 = 无：worker 载荷携 `url` / `driver`，经注册表 `adapterFor(worker)` 走**真实** custom 适配器
- * （页面机械 / 本单锚定 / 诊断串全为生产实现）；fixture 页由 `engine-helpers.startFixtureServer` 提供。
+ * （页面机械 / 本单锚定 / 诊断串全为生产实现）；fixture 页由 `engine-helpers.startFixtureServer` 提供
+ * （custom 侧页面在 `test/integration/custom-fixtures.mjs`）。
  */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -145,7 +146,7 @@ test('R11-b 无回复：回复区类名不在候选链 ⇒ E_NO_RESPONSE + 采�
     assert.match(result.error.message, /发送后未观测到新回复/, 'message 应说明等待时长口径');
     assert.match(result.error.message, /采集诊断/, 'message 应含诊断串');
     assert.match(result.error.message, /候选=0/, '诊断串应含候选数');
-    assert.match(result.error.message, /候选链 3 项均 0 命中/, '诊断串应含候选链命中读数');
+    assert.match(result.error.message, /候选链 11 项均 0 命中/, '诊断串应含候选链命中读数（b8：候选链 v2 共 11 项）');
     assert.ok(result.error.screenshot, 'E_NO_RESPONSE 应留失败截图');
     assert.ok(fs.existsSync(path.join(outboxDir, result.error.screenshot)));
   } finally {
@@ -166,7 +167,7 @@ test('R11-c 驱动参数生效：replySelector 指向正确容器 ⇒ 同一页�
       root,
       runner,
       taskId: 'custom-c1',
-      worker: workerOf(base, { page: '/custom-noreply', driver: { replySelector: '.bubble-item' } }),
+      worker: workerOf(base, { page: '/custom-noreply', driver: { replySelector: '.qa-block-7f3' } }),
       timeouts: { streamFirstByteMs: 15000 },
     });
     assert.equal(result.error, null, `补上 replySelector 后应成功：${JSON.stringify(result.error)}`);

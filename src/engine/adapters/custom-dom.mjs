@@ -4,10 +4,16 @@
  *   · `collectCustomAnswer`：只接受**基线之后**的候选（自身不带基线标 ∧ 可见 ∧ 非空 ∧ 不含输入区 ∧ 文本不在基线集 ∧ 非回声）
  *     ⇒ 取最后一条（最新一条助手回复）；无 ⇒ 空串（上层按 `E_NO_RESPONSE` 处置，不静默交付旧答复）；
  *   · `hasFreshTurn`：发送确认信号——出现不带基线标的可见候选（含用户消息气泡；§6.4 6s 口径的一半）；
- *   · `diagnoseCustomDom`：单行诊断串（候选数 / 新回合数 / 基线过滤数 / 回声过滤数 / 生效选择器）。
+ *   · `diagnoseCustomDom`（b8 扩）：单行诊断串 —— 既有字段（候选数 / 新回合数 / 基线过滤数 / 回声过滤数 / 生效选择器）
+ *     + **普查三段**（族计数 / 可见文本 / 类名 Top≤10，页内**一次** evaluate，扫描 ≤2000 可见元素）+ **遮挡段**（轴 1b 同源探测）；
+ *     文本片段先空白归一（#7）再截断；类名 token 与文本片段命中 `[a-z0-9]{16,}` ⇒ `<hash>`（F）；诊断整串 ≤900 字（适配器侧自限）。
+ *     普查**不读** cookie / storage / 表单值 / 输入区文本；采集与串组装拆在 `custom-census.mjs`（本件超 300 行档位，既定拆分点）。
  * 「基线之后」判定 = 候选**自身**带基线标 ⇒ 排除（祖先带标不判——新回合常挂在旧列表容器下，按祖先判会误杀本单回复）。
  * 本模块不抛错（DOM 只是兜底通道）：取不到 ⇒ 空串 / false / 诊断串。
  */
+import { probeOverlay } from './custom-overlay.mjs';
+import { collectCensus, describeDomStats } from './custom-census.mjs';
+
 export const BASELINE_ATTR = 'data-fo-custom-baseline';
 export const STATE_KEY = '__foCustomBaseline';
 
@@ -153,12 +159,13 @@ export async function hasFreshTurn(page, cfg) {
     .catch(() => false);
 }
 
-/** 诊断单行串（§6.5：候选数 / 新回合数 / 基线过滤数 / 回声过滤数 / 生效选择器；失败 ⇒ 单行说明，不抛） */
+/** 诊断单行串（§6.5：既有字段 + 普查三段 + 遮挡段；单行 ≤900 字；失败 ⇒ 单行说明，不抛） */
 export async function diagnoseCustomDom(page, cfg) {
-  return await page
-    .evaluate(COLLECT_FN, collectPayload(cfg))
-    .then((r) => describeDomStats(r.stats))
-    .catch(() => '采集诊断不可用（页面上下文异常）');
+  const raw = await page.evaluate(COLLECT_FN, collectPayload(cfg)).catch(() => null);
+  if (!raw?.stats) return '采集诊断不可用（页面上下文异常）';
+  const census = await collectCensus(page, cfg);
+  const overlay = await probeOverlay(page, cfg); // 遮挡段与轴 1b 同源（单一来源）
+  return describeDomStats(raw.stats, census, overlay);
 }
 
 function collectPayload(cfg) {
@@ -172,13 +179,3 @@ function collectPayload(cfg) {
   };
 }
 
-function describeDomStats(stats) {
-  const nonzero = stats.chainCounts.filter(([, n]) => n > 0);
-  const chain = stats.chainCounts.length
-    ? `；候选链 ${stats.chainCounts.length} 项${nonzero.length ? `命中 ${nonzero.map(([sel, n]) => `${sel}×${n}`).join('、')}` : '均 0 命中'}`
-    : '';
-  const oneLine = (v, max = 120) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
-  const via = stats.via === '自动' ? `replySelector=自动${chain}` : `replySelector=${oneLine(stats.via)}`;
-  const source = stats.source === 'container' ? '容器' : stats.source === 'last' ? '末条' : '无';
-  return `候选=${stats.candidates}（${via}）；新回合=${stats.fresh}；基线过滤=${stats.baselineFiltered}；回声过滤=${stats.echoFiltered}；拼接=${source}`;
-}

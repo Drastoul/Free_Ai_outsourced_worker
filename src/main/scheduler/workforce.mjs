@@ -6,7 +6,7 @@ import { COOLDOWN_MS } from './policy.mjs';
 import { getAdapter } from '../../engine/adapters/registry.mjs';
 
 /** 送件能力位（归一化：缺项 / 未注册平台 ⇒ 不支持）——单一来源 = 适配器注册表（同 platform-capabilities.mjs 派生处；scheduler.md §10 b7） */
-function supportsUpload(platform) {
+export function supportsUpload(platform) {
   return getAdapter(platform)?.capabilities?.upload === true;
 }
 
@@ -16,6 +16,12 @@ function uploadUnsupported(worker) {
     'E_WORKER_UNAVAILABLE',
     `该外包工平台不支持送件（附件）：${worker.name}（平台 ${worker.platform}）；请去掉附件后重派，或改派支持送件的平台`,
   );
+}
+
+/** 送件能力门（b8）：判定 + 拒绝词形收敛为单一入口（supportsUpload 归一化 / uploadUnsupported 逐字）——
+ *  派单（pick 指定路径）与补件（scheduler.attachFiles）同源；不支持 ⇒ 抛 E_WORKER_UNAVAILABLE（调用方不置冷却） */
+export function assertUploadCapable(worker) {
+  if (!supportsUpload(worker.platform)) throw uploadUnsupported(worker);
 }
 
 /** 引擎载荷（task.run / worker.check 的 worker 字段；scheduler.md §10 b7）：内置 = {id,name,platform}；custom 增 url / driver */
@@ -207,7 +213,7 @@ export class Workforce {
       if (code) {
         throw apiError('E_WORKER_UNAVAILABLE', `外包工「${w.name}」当前不可用（指定为硬绑定，不降级）`);
       }
-      if (requireUpload && !supportsUpload(w.platform)) throw uploadUnsupported(w);
+      if (requireUpload) assertUploadCapable(w);
       return { worker: w, mode: 'explicit', reason: `指定「${w.name}」；健康` };
     }
 

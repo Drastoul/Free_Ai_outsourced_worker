@@ -1,18 +1,35 @@
 /**
- * 自定义外包工适配器（`docs/design/modules/adapters.md` §6；R11 / b7 落地）：
+ * 自定义外包工适配器（`docs/design/modules/adapters.md` §6；R11 / b7 落地 · b8 写入轴重写 + 候选链 v2）：
  * 一个适配器承载任意站点——站点身份 = `bindWorker` 覆盖的 `url`，页面机械 = `driver` 三键（空串 = 通用启发式）。
  * 能力位（§6.2）：无流（`streamCapture:false` ⇒ 答复走 DOM 通道）/ 无送件 / 无下载 / 无开关 / 无新建会话 / 无载荷核对。
- * 装配：页面机械在 `custom-page.mjs`，DOM 采集 / 基线 / 诊断在 `custom-dom.mjs`。
+ * 装配：登录态与发送装配在 `custom-page.mjs`（写入机械 → `custom-write.mjs`），DOM 采集 / 基线 / 诊断在 `custom-dom.mjs`
+ * （普查段 → `custom-census.mjs`），遮挡处置（轴 1b）在 `custom-overlay.mjs`。
  */
 import { defineAdapter, EngineError } from './base.mjs';
 import { filesFromText } from './text-files.mjs';
 import { CONFIRM_MS, checkLoginState, loginFailureInfo, sendCustom } from './custom-page.mjs';
 import { collectCustomAnswer, diagnoseCustomDom, markCustomBaseline } from './custom-dom.mjs';
 
-/** 输入区候选链（§6.4；`driver.inputSelector` 非空 ⇒ 只用它） */
+/** 输入区候选链（§6.4；三个候选取文档序最靠后的可见者；`driver.inputSelector` 非空 ⇒ 只用它） */
 const INPUT_CANDIDATES = Object.freeze(['textarea', '[contenteditable="true"]', 'input[type="text"]']);
-/** 回复区候选链（§6.4；`driver.replySelector` 非空 ⇒ 只用它；按序取第一个命中者） */
-const REPLY_CANDIDATES = Object.freeze(['[data-message-author-role]', '[class*="message" i]', '[role="listitem"]']);
+/**
+ * 回复区候选链 v2（b8，§6.4；`driver.replySelector` 非空 ⇒ 只用它、**继续最高优先**；否则按序取**第一个 ≥1 命中**项）：
+ * 现链 3 项原位不动（已通过站点候选集不变）+ 新族 8 项尾追（原三项 0 命中时才生效），
+ * 排序原则 = 角色属性 → 回合容器 → 正文块 → 兜底；导出供批内单元冻结（防后续漂移）。
+ */
+export const REPLY_CANDIDATES = Object.freeze([
+  '[data-message-author-role]',
+  '[class*="message" i]',
+  '[role="listitem"]',
+  '[data-role="assistant"]',
+  '[data-testid*="assistant" i], [data-testid*="message" i]',
+  '[class*="bubble" i]',
+  '[class*="chat-message" i], [class*="message-content" i], [class*="response-content" i]',
+  '[class*="answer" i]',
+  '[class*="markdown" i]',
+  '[class*="assistant" i]',
+  '[class*="reply" i], [class*="response" i]',
+]);
 /** 基座 url 占位（每工人实例由 `bindWorker` 覆盖）：未覆盖即派单 = 主进程校验漏网——引擎不会打开该站点（失败回执将落在登录 / 选择器诊断，而非「url 缺失」；缺 url 的 custom 条目由配置层隔离，见 docs/design/modules/scheduler.md §10） */
 const PLACEHOLDER_URL = 'about:blank';
 const DRIVER_KEYS = ['inputSelector', 'sendButtonSelector', 'replySelector'];
@@ -42,7 +59,7 @@ function instantiate({ url, driver }) {
       requestPayloadCapture: false,
     },
     selectors: {
-      input: `${INPUT_CANDIDATES.join(' → ')}（取文档序最靠后的可见者；driver.inputSelector 非空 ⇒ 只用它）`,
+      input: `${INPUT_CANDIDATES.join(' → ')}（三个候选取文档序最靠后的可见者；driver.inputSelector 非空 ⇒ 只用它）`,
       send: 'driver.sendButtonSelector 非空 ⇒ 点该按钮；空 ⇒ 聚焦输入区 + insertText + Enter',
       reply: `${REPLY_CANDIDATES.join(' → ')}（取第一个命中者；driver.replySelector 非空 ⇒ 只用它）`,
       confirm: `发送后 ${CONFIRM_MS / 1000}s：输入区已清空 ∨ 出现新回合元素`,

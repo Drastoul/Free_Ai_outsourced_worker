@@ -105,6 +105,8 @@
 - 入参：`{ taskId, files: string[] }`（约束同 `dispatch_task.files`）。
 - 语义：仅当任务**尚未发送**（状态 queued 或 running 的 opening / uploading 阶段）时有效——把文件追加进该任务并立即上传。
 - 错误：`E_TASK_ALREADY_SENT`、`E_BAD_FILE`、`E_TASK_UNKNOWN`。
+  - **另（b8）**：带 `files` 且目标外包工平台不支持送件（`upload !== true`，如自定义外包工）⇒ **同步拒绝 `E_WORKER_UNAVAILABLE`**（不追加文件、不重启执行、任务状态不变、不置冷却）；检查顺序 = 任务存在 → 能力门 → 状态 / 阶段门，判定与词形单一来源见 `docs/design/modules/scheduler.md` §3。
+  - **该拒绝的词形（G）**：沿用既有 `uploadUnsupported` 逐字（「请去掉附件后重派，或改派支持送件的平台」）——对补件路径语义略偏（任务已存在、无「重派」动作），**裁定接受**；码与语义不变。
 
 ## 4. 异步模型与长轮询
 

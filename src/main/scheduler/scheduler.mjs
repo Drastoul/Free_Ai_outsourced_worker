@@ -3,7 +3,7 @@
 import { EventEmitter } from 'node:events';
 import { apiError, needsHuman, toTaskError } from '../mcp/errors.mjs';
 import { Task, ATTACH_PHASES, isTerminalState } from './task.mjs';
-import { Workforce } from './workforce.mjs';
+import { Workforce, assertUploadCapable } from './workforce.mjs';
 import { TaskRunner } from './execution.mjs';
 import { resolveOutboxDir, createTaskDir, writeManifest, markInterruptedManifests } from '../../shared/outbox.mjs';
 
@@ -263,12 +263,13 @@ export class Scheduler extends EventEmitter {
   }
 
   /**
-   * 附件补送：queued ⇒ 追加（执行时随 task.run 上传）；running(opening/uploading) ⇒ 追加后重启该次预发送执行。
+   * 附件补送（b8 补件能力门：目标外包工不支持送件 ⇒ 同步拒绝 E_WORKER_UNAVAILABLE，判定与词形 = workforce.assertUploadCapable）：queued ⇒ 追加（执行时随 task.run 上传）；running(opening/uploading) ⇒ 追加后重启该次预发送执行。
    * 已发送之后 ⇒ E_TASK_ALREADY_SENT。
    */
   async attachFiles(taskId, files) {
     const t = this.tasks.get(taskId);
     if (!t) throw apiError('E_TASK_UNKNOWN', `任务号不存在：${taskId}`);
+    if (files.length > 0) assertUploadCapable(t.worker);
     const allowed = t.state === 'queued' || (t.state === 'running' && t.phase && ATTACH_PHASES.has(t.phase));
     if (!allowed) {
       throw apiError(

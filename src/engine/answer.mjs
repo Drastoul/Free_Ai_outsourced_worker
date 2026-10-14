@@ -144,7 +144,7 @@ export async function collectAnswer(page, adapter, capture, timeouts, { isCancel
 async function domDiagnosis(adapter, page) {
   try {
     const diag = typeof adapter?.dom?.diagnose === 'function' ? await adapter.dom.diagnose(page) : null;
-    return diag ? `+ 采集诊断：${String(diag).slice(0, 240)}` : '';
+    return diag ? `+ 采集诊断：${String(diag).slice(0, 1200)}` : '';
   } catch {
     return '';
   }
